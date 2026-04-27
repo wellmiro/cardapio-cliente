@@ -1,0 +1,418 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
+
+/* ===== BASE ===== */
+.checkout-page {
+    min-height: 100vh;
+    background: #f4f4f4;
+    font-family: 'Nunito', sans-serif;
+}
+
+.checkout-wrapper {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 20px 16px 60px;
+    box-sizing: border-box;
+}
+
+/* ===== STEPPER (AJUSTADO PADRÃO APP) ===== */
+.stepper {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 28px 0 30px;
+    position: relative;
+}
+
+.stepper-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    position: relative;
+}
+
+.stepper-line {
+    position: absolute;
+    top: 20px;
+    left: -50%;
+    width: 100%;
+    height: 3px;
+    background: #e5e5e5;
+}
+
+.stepper-line.done {
+    background: #E84F3D;
+}
+
+.stepper-circle {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #ddd;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700; /* ↓ menos pesado */
+    font-size: 0.95rem;
+    z-index: 2;
+}
+
+.stepper-circle.active {
+    background: #E84F3D;
+    border-color: #E84F3D;
+    color: #fff;
+}
+
+.stepper-circle.done {
+    background: #E84F3D;
+    color: #fff;
+}
+
+/* 🔥 TEXTO DO STEPPER (CORRIGIDO) */
+.stepper-label {
+    font-size: 0.85rem;  /* ↑ tava minúsculo */
+    margin-top: 6px;
+    font-weight: 600;    /* ↓ menos pesado */
+    color: #777;
+}
+
+.stepper-label.active {
+    color: #E84F3D;
+    font-weight: 700;
+}
+
+/* ===== BOX ===== */
+.box-checkout {
+    background: #fff;
+    border-radius: 18px;
+    padding: 24px 22px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+    margin-bottom: 16px;
+}
+
+.box-title {
+    font-size: 1.1rem;   /* ↓ leve ajuste */
+    font-weight: 700;    /* ↓ menos gritado */
+    color: #222;
+    margin-bottom: 18px;
+}
+
+/* ===== INPUTS ===== */
+.input-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.input-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.input-group label {
+    font-size: 0.8rem;
+    font-weight: 600; /* ↓ menos pesado */
+    color: #666;
+    margin-bottom: 5px;
+}
+
+.input-group input {
+    padding: 12px;
+    border-radius: 10px;
+    border: 2px solid #eee;
+    background: #fafafa;
+    font-size: 0.95rem;
+    font-weight: 500; /* 🔥 principal ajuste */
+}
+
+.input-group input:focus {
+    border-color: #E84F3D;
+    background: #fff;
+}
+
+/* ===== PAGAMENTO ===== */
+.payment-selector {
+    display: flex;
+    gap: 10px;
+}
+
+.pay-btn {
+    flex: 1;
+    padding: 14px;
+    border-radius: 12px;
+    border: 2px solid #eee;
+    background: #fafafa;
+    font-weight: 600; /* ↓ antes 700 */
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.pay-btn.active {
+    border-color: #E84F3D;
+    background: #fff3f2;
+    color: #E84F3D;
+}
+
+/* ===== CARTÃO ===== */
+.cartao-opcoes {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.cartao-btn {
+    flex: 1;
+    padding: 14px;
+    border-radius: 12px;
+    border: 2px solid #eee;
+    background: #fff;
+    font-weight: 600; /* ↓ antes 700 */
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.cartao-btn.active {
+    border-color: #E84F3D;
+    background: #fff3f2;
+    color: #E84F3D;
+}
+
+/* ===== PIX ===== */
+.pix-info {
+    background: #fff8e1;
+    border: 1px solid #ffe082;
+    border-radius: 12px;
+    padding: 14px;
+    font-size: 0.9rem;
+}
+
+/* ===== REVISÃO ===== */
+.revisao-secao {
+    background: #fafafa;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 12px;
+}
+
+.revisao-titulo {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #E84F3D;
+    margin-bottom: 6px;
+}
+
+.revisao-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #eee;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+/* ===== TOTAL ===== */
+.valores-box {
+    background: #fafafa;
+    border-radius: 12px;
+    padding: 16px;
+    margin-top: 12px;
+}
+
+.valor-linha {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 0.9rem;
+}
+
+.valor-linha.total {
+    font-weight: 700; /* ↓ antes 800 */
+    font-size: 1.05rem;
+}
+
+.valor-linha.total span:last-child {
+    color: #E84F3D;
+}
+
+/* ===== BOTÕES ===== */
+.btn-checkout {
+    width: 100%;
+    padding: 15px;
+    border-radius: 12px;
+    border: none;
+    background: #E84F3D;
+    color: #fff;
+    font-weight: 700; /* ↓ antes 800 */
+    font-size: 0.95rem;
+    cursor: pointer;
+}
+
+.btn-checkout:hover {
+    background: #d24434;
+}
+
+.btn-back {
+    background: #eee;
+    border-radius: 12px;
+    padding: 15px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    border: none;
+    cursor: pointer;
+}
+
+/* ===== MOBILE ===== */
+@media (max-width: 600px) {
+    .input-row {
+        flex-direction: column;
+    }
+}
+
+/* 🔥 MAPA */
+.mapa-container {
+    height: 260px;
+    width: 100%;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 2px solid #eee;
+    margin: 12px 0;
+}
+
+.leaflet-container {
+    width: 100%;
+    height: 100%;
+}
+
+/* 🔥 ESPAÇO ENTRE BOTÕES */
+.footer-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.espacamento-top {
+    margin-top: 14px;
+}
+
+/* 🔥 MODAL SUCESSO */
+.modal-sucesso {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+}
+
+.modal-box {
+    background: #fff;
+    padding: 30px 25px;
+    border-radius: 16px;
+    text-align: center;
+    animation: pop 0.3s ease;
+}
+
+.modal-box h3 {
+    margin: 10px 0 5px;
+}
+
+.modal-box p {
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.check {
+    width: 60px;
+    height: 60px;
+    background: #E84F3D;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    margin: 0 auto;
+}
+
+@keyframes pop {
+    from {
+        transform: scale(0.8);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* ===== MAPA ===== */
+.mapa-container {
+    height: 260px;
+    width: 100%;
+    margin: 12px 0 16px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 2px solid #eee;
+}
+
+/* ===== ESPAÇAMENTO BOTÕES ===== */
+.footer-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.footer-buttons .btn-checkout {
+    flex: 1;
+}
+
+.btn-back {
+    min-width: 100px;
+}
+
+/* ===== MODAL ANIMAÇÃO ===== */
+.modal {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+/* ===== LINHA STEPPER ===== */
+.stepper-item {
+    position: relative;
+}
+
+.stepper-item::after {
+    content: "";
+    position: absolute;
+    top: 20px;
+    right: -50%;
+    width: 100%;
+    height: 2px;
+    background: #e5e5e5;
+    z-index: 0;
+}
+
+.stepper-item:last-child::after {
+    display: none;
+}
+
+/* linha ativa */
+.stepper-item.active::after {
+    background: #E84F3D;
+}
+
+/* garante que o círculo fique por cima */
+.stepper-circle {
+    position: relative;
+    z-index: 2;
+}

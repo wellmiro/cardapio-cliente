@@ -1,0 +1,47 @@
+/* src/components/cart/cart.css */
+
+.lista-produtos {
+    height: calc(100% - 250px);
+    margin: 0 10px;
+    overflow: auto;
+}
+
+.footer-cart {
+    margin-top: 20px;
+    border-top: 2px solid #e7e7e7;
+}
+
+.footer-cart-valor {
+    margin: 20px 25px 23px 25px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.cart-btn-close {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    width: 32px;
+    cursor: pointer;
+}
+
+/* FORÇA O SITE A ENCOLHER QUANDO A SACOLA ABRE */
+body.cart-open {
+    padding-right: 360px !important; /* Cria o espaço na marra */
+    overflow-x: hidden !important;
+}
+
+/* Ajusta o Navbar e outros elementos fixos */
+body.cart-open .navbar, 
+body.cart-open .topo {
+    width: calc(100% - 360px) !important;
+    right: 360px !important;
+    left: auto !important;
+}
+
+/* Celular: Sacola ocupa a tela toda ou sobrepõe sem empurrar */
+@media (max-width: 768px) {
+    body.cart-open {
+        padding-right: 0 !important;
+    }
+}

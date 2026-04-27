@@ -1,0 +1,344 @@
+/* ==========================================================================
+   CARDS DA VITRINE
+   ========================================================================== */
+.produto-box {
+  width: 210px; 
+  min-height: 360px; 
+  background: white;
+  padding: 12px;
+  border-radius: 15px;
+  border: 1px solid #f0f0f0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0px 4px 12px rgba(0,0,0,0.06);
+  margin: 10px;
+  box-sizing: border-box;
+  position: relative;
+  transition: transform 0.2s;
+}
+
+.produto-box:hover {
+    transform: translateY(-5px);
+}
+
+.badge-qtd {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  background: #E84F3D;
+  color: white;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: bold;
+  border: 3px solid white;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  z-index: 10;
+}
+
+.produto-img-container {
+  width: 100%;
+  height: 150px;
+  border-radius: 12px;
+  border: 1px solid #eeeeee;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 10px;
+  overflow: hidden;
+  background-color: #fff;
+}
+
+.produto-img-container img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.produto-info h2 { 
+  font-size: 1rem; 
+  color: #333; 
+  margin: 5px 0;
+  line-height: 1.2;
+}
+
+.prod-vitrine-preco { 
+  color: #E84F3D; 
+  font-size: 1.15rem; 
+  font-weight: bold; 
+  margin-bottom: 10px; 
+}
+
+.btn-cart { 
+  width: 100%; 
+  padding: 10px; 
+  background: #E84F3D; 
+  color: white; 
+  border: none; 
+  border-radius: 10px; 
+  font-weight: bold; 
+  font-size: 0.9rem; 
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-cart:hover {
+    background: #d24434;
+}
+
+/* ==========================================================================
+   MODAL
+   ========================================================================== */
+.modal-overlay {
+  position: fixed; 
+  top: 0; 
+  left: 0; 
+  width: 100%; 
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6); 
+  display: flex; 
+  justify-content: center; 
+  align-items: center; 
+  z-index: 9999;
+}
+
+.modal-content {
+  background: white; 
+  width: 90%; 
+  max-width: 420px; 
+  padding: 25px; 
+  border-radius: 20px;
+  position: relative; 
+  text-align: center;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-close { 
+  position: absolute; 
+  top: 15px; 
+  right: 20px; 
+  font-size: 28px; 
+  cursor: pointer; 
+  color: #999; 
+}
+
+.modal-img-container {
+  width: 100%; 
+  height: 200px; 
+  border-radius: 15px; 
+  border: 1px solid #eee;
+  display: flex; 
+  justify-content: center; 
+  align-items: center; 
+  margin: 0 auto 15px auto;
+  overflow: hidden;
+}
+
+.modal-img { 
+  width: 100%; 
+  height: 100%; 
+  object-fit: cover; 
+}
+
+.modal-descricao-texto {
+    color: #666;
+    font-size: 0.95rem;
+    margin: 15px 0;
+    line-height: 1.5;
+    text-align: left;
+}
+
+/* ==========================================================================
+   OPÇÕES / ADICIONAIS
+   ========================================================================== */
+.modal-opcao-grupo {
+    width: 100%;
+    margin-top: 20px;
+    text-align: left;
+}
+
+.modal-opcao-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #f5f5f5;
+    padding: 10px 12px;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.modal-opcao-titulo {
+    font-weight: bold;
+    font-size: 0.95rem;
+    color: #333;
+    flex-grow: 1;
+}
+
+.modal-opcao-max {
+    font-size: 0.75rem;
+    color: #888;
+    width: 100%;
+    margin-top: 2px;
+}
+
+.badge-obrigatorio {
+    background: #E84F3D;
+    color: white;
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.badge-opcional {
+    background: #ddd;
+    color: #666;
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 20px;
+    white-space: nowrap;
+}
+
+.modal-opcao-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 8px;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    transition: background 0.15s;
+    border-radius: 8px;
+}
+
+.modal-opcao-item:hover {
+    background: #fafafa;
+}
+
+.modal-opcao-item.marcado {
+    background: #fff5f4;
+}
+
+.modal-opcao-item-check {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    border: 2px solid #ddd;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 0.85rem;
+    font-weight: bold;
+    color: white;
+    background: #fff;
+    flex-shrink: 0;
+    transition: all 0.15s;
+}
+
+.marcado .modal-opcao-item-check {
+    background: #E84F3D;
+    border-color: #E84F3D;
+}
+
+.modal-opcao-item-nome {
+    flex-grow: 1;
+    font-size: 0.9rem;
+    color: #333;
+}
+
+.modal-opcao-item-preco {
+    font-size: 0.85rem;
+    color: #E84F3D;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+/* ==========================================================================
+   OBSERVAÇÕES
+   ========================================================================== */
+.modal-obs-container {
+    text-align: left;
+    width: 100%;
+    margin-top: 20px;
+}
+
+.modal-obs-container label {
+    font-weight: bold;
+    font-size: 0.9rem;
+    color: #333;
+    display: block;
+    margin-bottom: 8px;
+}
+
+.modal-obs { 
+  width: 100%; 
+  height: 80px; 
+  border: 1px solid #ddd; 
+  border-radius: 12px; 
+  padding: 12px; 
+  resize: none; 
+  box-sizing: border-box; 
+  font-family: inherit;
+  background-color: #f9f9f9;
+  font-size: 0.9rem;
+}
+
+.modal-obs:focus {
+    outline: none;
+    border-color: #E84F3D;
+    background-color: #fff;
+}
+
+/* ==========================================================================
+   RODAPÉ DO MODAL
+   ========================================================================== */
+.modal-footer { 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center; 
+  gap: 15px; 
+  margin-top: 25px; 
+}
+
+.contador { 
+  display: flex; 
+  align-items: center; 
+  gap: 15px; 
+  border: 1px solid #ddd; 
+  padding: 8px 18px; 
+  border-radius: 30px; 
+}
+
+.btn-qtd { 
+  background: none; 
+  border: none; 
+  font-size: 22px; 
+  color: #E84F3D; 
+  cursor: pointer; 
+  font-weight: bold; 
+}
+
+.btn-add-modal { 
+  flex-grow: 1; 
+  background: #E84F3D; 
+  color: white; 
+  border: none; 
+  padding: 14px; 
+  border-radius: 12px; 
+  font-weight: bold; 
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.btn-add-modal:hover {
+    background: #d24434;
+}

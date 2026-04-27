@@ -1,0 +1,107 @@
+/* src/pages/home/home.css */
+
+.center-page {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    width: 100%;
+}
+
+.loader {
+    border: 6px solid #f3f3f3;
+    border-top: 6px solid #E84F3D;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.main-container {
+    padding-top: 180px;
+    padding-bottom: 100px;
+    width: 100%;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Centraliza as categorias */
+}
+
+.category-section {
+    margin-bottom: 50px;
+    width: 100%;
+    max-width: 1200px;
+    padding: 0 20px;
+    box-sizing: border-box;
+}
+
+.category-title {
+    font-size: 1.6rem;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 25px;
+    padding-left: 10px;
+    border-left: 5px solid #E84F3D;
+    text-align: left;
+}
+
+.product-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    justify-content: center; /* ESSENCIAL: Mantém os cards no centro */
+    align-items: flex-start;
+    width: 100%;
+}
+
+.topo {
+    position: fixed;
+    top: 0;
+    width: 100%;
+    z-index: 999;
+    background-color: #fff;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+/* ... seus estilos anteriores ... */
+
+.error-title {
+    color: #333;
+    margin-bottom: 20px;
+    font-size: 1.2rem;
+    text-align: center;
+    padding: 0 20px;
+}
+
+.btn-recarregar {
+    background-color: #E84F3D;
+    color: white;
+    border: none;
+    padding: 12px 25px;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.3s ease;
+    box-shadow: 0 4px 10px rgba(232, 79, 61, 0.3);
+}
+
+.btn-recarregar:hover {
+    background-color: #d14434;
+}
+
+.btn-recarregar:active {
+    transform: scale(0.98);
+}
+
+.loading-text {
+    margin-top: 15px;
+    color: #666;
+    font-weight: 500;
+}

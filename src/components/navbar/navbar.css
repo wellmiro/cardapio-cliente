@@ -1,32 +1,35 @@
-/* NAVBAR 99BURGER - COMPLETA E AJUSTADA */
+/* navbar.css */
 
 .navbar {
     width: 100%;
     min-height: 100px; 
     height: auto;
-    background-image: url("../../assets/bg-navbar.png");
-    background-size: cover;
-    background-repeat: no-repeat;
-    background-position: center;
+    background-image: none !important;
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    padding: 10px 30px;
+    /* ALTERADO: Itens começam no topo da barra */
+    align-items: flex-start; 
+    /* Aumentei o padding superior para 20px */
+    padding: 20px 30px 10px 30px; 
     box-sizing: border-box;
     flex-wrap: wrap; 
     position: relative;
-    z-index: 1001; /* Garante que fique acima das categorias */
+    z-index: 1001;
+    overflow: hidden;
 }
 
 .navbar-logo-section {
     display: flex;
-    align-items: center;
+    align-items: flex-start; /* Alinha o logo ao topo da seção dele */
     order: 1;
+    /* Ajuste fino: se ainda achar baixo, pode usar margin-top negativo */
+    margin-top: -5px; 
 }
 
 .logotipo {
     max-width: 120px;
     height: auto;
+    display: block; /* Garante que não haja espaço extra embaixo */
 }
 
 .busca-wrapper {

@@ -16,10 +16,7 @@ function ProdutoVitrine(props) {
 
     const itemNoCarrinho = cartItems.find(item => item.id === props.id_produto);
     const qtdExibir = itemNoCarrinho ? itemNoCarrinho.qtd : 0;
-
-    const imagemPadrao = "https://placehold.co/300x300?text=Sem+Foto";
-    const fotoProduto = props.foto || imagemPadrao;
-
+    const fotoProduto = props.foto || "https://placehold.co/300x300?text=Sem+Foto";
     const formatar = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
     useEffect(() => {
@@ -27,181 +24,131 @@ function ProdutoVitrine(props) {
         setCarregando(true);
         fetch(`${API}/opcoes_digital/${props.id_produto}`)
             .then(r => r.json())
-            .then(data => {
-                setOpcoes(Array.isArray(data) ? data : []);
-                setSelecionados({});
-            })
+            .then(d => setOpcoes(Array.isArray(d) ? d : []))
             .catch(() => setOpcoes([]))
             .finally(() => setCarregando(false));
     }, [aberto, props.id_produto]);
 
-    const toggleItem = (id_opcao, item, qtd_max) => {
+    const alterarQtdItem = (id_opcao, item, delta, qtd_max) => {
         setSelecionados(prev => {
-            const atual = prev[id_opcao] || [];
-            const jatem = atual.find(i => i.id_item === item.id_item);
-            if (jatem) {
-                return { ...prev, [id_opcao]: atual.filter(i => i.id_item !== item.id_item) };
-            } else {
-                if (qtd_max && atual.length >= qtd_max) return prev;
-                return { ...prev, [id_opcao]: [...atual, item] };
-            }
+            const copia = { ...prev };
+            const atual = copia[item.id_item] || { ...item, qtd_item: 0, id_opcao };
+            let novaQtd = atual.qtd_item + delta;
+            if (novaQtd < -1) novaQtd = -1;
+            
+            const totalNoGrupo = Object.values(copia)
+                .filter(i => i.id_opcao === id_opcao && i.id_item !== item.id_item)
+                .reduce((acc, i) => acc + (i.qtd_item > 0 ? i.qtd_item : 0), 0);
+            
+            if (delta > 0 && qtd_max && (totalNoGrupo + (novaQtd > 0 ? novaQtd : 0)) > qtd_max) return prev;
+            if (novaQtd === 0) delete copia[item.id_item];
+            else copia[item.id_item] = { ...atual, qtd_item: novaQtd };
+            return copia;
         });
     };
 
-    const totalAdicionais = Object.values(selecionados)
-        .flat()
-        .reduce((acc, i) => acc + i.vl_item, 0);
-
+    const totalAdicionais = Object.values(selecionados).reduce((acc, i) => acc + (i.qtd_item > 0 ? i.vl_item * i.qtd_item : 0), 0);
     const totalFinal = (props.preco + totalAdicionais) * qtd;
 
-    const obrigatoriosPendentes = opcoes
-        .filter(o => o.ind_obrigatorio === 'S')
-        .filter(o => !selecionados[o.id_opcao] || selecionados[o.id_opcao].length === 0);
-
-    // FUNÇÃO PARA O BOTÃO DO CARD (Adiciona direto e abre sacola)
-    const handleAddDireto = (e) => {
-        e.stopPropagation(); // ESSENCIAL: Impede o clique de chegar no card e abrir o modal
-
-        AddItemCart({
-            id: props.id_produto,
-            nome: props.nome,
-            preco: props.preco,
-            foto: fotoProduto,
-            qtd: 1,
-            observacao: "",
-            adicionais: []
-        });
-
-        if (setShowCart) setShowCart(true);
-    };
-
-    // FUNÇÃO PARA O BOTÃO DENTRO DO MODAL
     const handleAdicionarModal = () => {
-        if (obrigatoriosPendentes.length > 0) {
-            alert(`Selecione obrigatoriamente: ${obrigatoriosPendentes.map(o => o.descricao).join(', ')}`);
-            return;
+        const todos = Object.values(selecionados);
+        
+        // Pega os itens -1 e gera o texto "SEM ITEM"
+        const removidos = todos.filter(i => i.qtd_item === -1).map(i => `SEM ${i.nome_item.toUpperCase()}`);
+        
+        let obsFinal = obs.trim();
+        if (removidos.length > 0) {
+            const listaRemovidos = removidos.join(", ");
+            obsFinal = obsFinal ? `${obsFinal} (${listaRemovidos})` : listaRemovidos;
         }
-
-        const adicionaisSelecionados = Object.values(selecionados).flat();
 
         AddItemCart({
             id: props.id_produto,
             nome: props.nome,
             preco: props.preco + totalAdicionais,
             foto: fotoProduto,
-            qtd,
-            observacao: obs,
-            adicionais: adicionaisSelecionados
+            qtd: qtd,
+            observacao: obsFinal,
+            adicionais: todos.filter(i => i.qtd_item > 0).map(i => ({
+                ...i, 
+                nome_formatado: i.qtd_item > 1 ? `${i.qtd_item}x ${i.nome_item}` : i.nome_item
+            }))
         });
 
-        setAberto(false);
-        setQtd(1);
-        setObs("");
-        setSelecionados({});
-
+        setAberto(false); setQtd(1); setObs(""); setSelecionados({});
         if (setShowCart) setShowCart(true);
     };
 
     return (
         <>
-            {/* Clicar no box do produto abre o modal */}
             <div className="produto-box" onClick={() => setAberto(true)}>
                 {qtdExibir > 0 && <div className="badge-qtd">{qtdExibir}</div>}
-
-                <div className="produto-img-container">
-                    <img
-                        src={fotoProduto}
-                        alt={props.nome}
-                        onError={(e) => { e.target.onerror = null; e.target.src = imagemPadrao; }}
-                    />
-                </div>
-
+                <div className="produto-img-container"><img src={fotoProduto} alt={props.nome} /></div>
                 <div className="produto-info">
-                    <h2>{props.nome}</h2>
-                </div>
-
-                <div style={{ width: '100%' }}>
+                    <h2 className="prod-vitrine-nome">{props.nome}</h2>
+                    <p className="prod-vitrine-descricao">{props.descricao}</p>
                     <div className="prod-vitrine-preco">{formatar(props.preco)}</div>
-                    
-                    {/* Botão de adicionar direto - handleAddDireto resolve o problema */}
-                    <button className="btn-cart" onClick={handleAddDireto}>
-                        Adicionar
-                    </button>
                 </div>
+                <button className="btn-cart"><span>Adicionar</span></button>
             </div>
 
             {aberto && (
                 <div className="modal-overlay" onClick={() => setAberto(false)}>
-                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                        <span className="modal-close" onClick={() => setAberto(false)}>&times;</span>
-
-                        <div className="modal-img-container">
-                            <img
-                                src={fotoProduto}
-                                className="modal-img"
-                                alt={props.nome}
-                                onError={(e) => { e.target.onerror = null; e.target.src = imagemPadrao; }}
-                            />
+                    <div className="modal-content" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header-img">
+                             <img src={fotoProduto} alt={props.nome} />
+                             <button className="btn-modal-close" onClick={() => setAberto(false)}>✕</button>
                         </div>
-
-                        <h2>{props.nome}</h2>
-                        <p className="modal-descricao-texto">{props.descricao}</p>
-
-                        {carregando && <p style={{ color: '#999', fontSize: '0.9rem' }}>Carregando opções...</p>}
-
-                        {opcoes.map(opcao => (
-                            <div key={opcao.id_opcao} className="modal-opcao-grupo">
-                                <div className="modal-opcao-header">
-                                    <span className="modal-opcao-titulo">{opcao.descricao}</span>
-                                    {opcao.ind_obrigatorio === 'S'
-                                        ? <span className="badge-obrigatorio">Obrigatório</span>
-                                        : <span className="badge-opcional">Opcional</span>
-                                    }
-                                    {opcao.qtd_max_escolha > 1 && (
-                                        <span className="modal-opcao-max">Escolha até {opcao.qtd_max_escolha}</span>
-                                    )}
-                                </div>
-
-                                {opcao.itens.map(item => {
-                                    const marcado = (selecionados[opcao.id_opcao] || []).some(i => i.id_item === item.id_item);
-                                    return (
-                                        <div
-                                            key={item.id_item}
-                                            className={`modal-opcao-item ${marcado ? 'marcado' : ''}`}
-                                            onClick={() => toggleItem(opcao.id_opcao, item, opcao.qtd_max_escolha)}
-                                        >
-                                            <div className="modal-opcao-item-check">
-                                                {marcado ? '✓' : ''}
-                                            </div>
-                                            <span className="modal-opcao-item-nome">{item.nome_item}</span>
-                                            {item.vl_item > 0 && (
-                                                <span className="modal-opcao-item-preco">+ {formatar(item.vl_item)}</span>
-                                            )}
+                        <div className="modal-body">
+                            <h2 className="modal-title">{props.nome}</h2>
+                            <div className="modal-price-tag">{formatar(props.preco)}</div>
+                            <p className="modal-desc-long">{props.descricao}</p>
+                            <div className="modal-scroll-area">
+                                {carregando ? <div className="loading-txt">Carregando opcionais...</div> :
+                                    opcoes.map(opt => (
+                                        <div key={opt.id_opcao} className="grupo-opcionais">
+                                            <div className="grupo-titulo">{opt.descricao} {opt.qtd_max_escolha > 0 && <small>(Escolha até {opt.qtd_max_escolha})</small>}</div>
+                                            {opt.itens.map(item => {
+                                                const q = selecionados[item.id_item]?.qtd_item || 0;
+                                                return (
+                                                    <div key={item.id_item} className="item-linha">
+                                                        <div className="item-nome-wrapper">
+                                                            <div className={`check-box-visual ${q > 0 ? 'marcado' : q < 0 ? 'retirado' : ''}`}>
+                                                                {q > 0 ? "✓" : q < 0 ? "✕" : ""}
+                                                            </div>
+                                                            <span className={`item-nome-texto ${q < 0 ? 'texto-retirado' : ''}`}>
+                                                                {q < 0 ? `SEM ${item.nome_item}` : item.nome_item}
+                                                            </span>
+                                                        </div>
+                                                        <div className="item-controles">
+                                                            {item.vl_item > 0 && q >= 0 && <span className="item-valor-adicional">+ {formatar(item.vl_item)}</span>}
+                                                            <div className="seletor-mini">
+                                                                <button onClick={() => alterarQtdItem(opt.id_opcao, item, -1, opt.qtd_max_escolha)}>-</button>
+                                                                <span className={q < 0 ? 'num-negativo' : ''}>{q}</span>
+                                                                <button onClick={() => alterarQtdItem(opt.id_opcao, item, 1, opt.qtd_max_escolha)}>+</button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
                                         </div>
-                                    );
-                                })}
+                                    ))
+                                }
+                                <div className="obs-container">
+                                    <label>Observações</label>
+                                    <textarea placeholder="Ex: Tirar cebola, ponto da carne, etc..." value={obs} onChange={e => setObs(e.target.value)} />
+                                </div>
                             </div>
-                        ))}
-
-                        <div className="modal-obs-container">
-                            <label>Observações</label>
-                            <textarea
-                                className="modal-obs"
-                                placeholder="Ex: sem cebola, ponto da carne, etc..."
-                                value={obs}
-                                onChange={(e) => setObs(e.target.value)}
-                            ></textarea>
-                        </div>
-
-                        <div className="modal-footer">
-                            <div className="contador">
-                                <button className="btn-qtd" onClick={() => qtd > 1 && setQtd(qtd - 1)}>-</button>
-                                <b>{qtd}</b>
-                                <button className="btn-qtd" onClick={() => setQtd(qtd + 1)}>+</button>
+                            <div className="modal-footer-acoes">
+                                <div className="contador-produto-principal">
+                                    <button onClick={() => qtd > 1 && setQtd(qtd - 1)}>-</button>
+                                    <span>{qtd}</span>
+                                    <button onClick={() => setQtd(qtd + 1)}>+</button>
+                                </div>
+                                <button className="btn-enviar-carrinho" onClick={handleAdicionarModal}>
+                                    ADICIONAR • {formatar(totalFinal)}
+                                </button>
                             </div>
-                            <button className="btn-add-modal" onClick={handleAdicionarModal}>
-                                Adicionar {formatar(totalFinal)}
-                            </button>
                         </div>
                     </div>
                 </div>
@@ -209,5 +156,4 @@ function ProdutoVitrine(props) {
         </>
     );
 }
-
 export default ProdutoVitrine;

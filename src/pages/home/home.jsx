@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react"; // Adicionado useCallback
+import { useEffect, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import Navbar from "../../components/navbar/navbar.jsx";
 import ProdutoVitrine from "../../components/produto-vitrine/produto-vitrine.jsx";
@@ -13,10 +13,10 @@ function Home() {
   const [rolou, setRolou] = useState(false);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
+  const [busca, setBusca] = useState(""); // Estado para a barra de pesquisa
 
   const imagemPadrao = "https://placehold.co/300x300?text=Sem+Foto";
 
-  // Função isolada para poder ser chamada pelo botão "Tentar Novamente"
   const carregarDados = useCallback(async () => {
     if (!id) return;
 
@@ -57,7 +57,13 @@ function Home() {
     }
   }, [id, carregarDados]);
 
-  const produtosPorCategoria = produtos.reduce((acc, produto) => {
+  // Lógica de Filtro: Filtra produtos por nome ou descrição
+  const produtosFiltrados = produtos.filter(p => 
+    p.nome.toLowerCase().includes(busca.toLowerCase()) || 
+    (p.descricao && p.descricao.toLowerCase().includes(busca.toLowerCase()))
+  );
+
+  const produtosPorCategoria = produtosFiltrados.reduce((acc, produto) => {
     const categoriaNome = produto.categoria || "Outros";
     if (!acc[categoriaNome]) acc[categoriaNome] = [];
     acc[categoriaNome].push(produto);
@@ -86,28 +92,40 @@ function Home() {
 
   return (
     <div>
-      <Navbar showMenu={true} />
+      <Navbar 
+        showMenu={true} 
+        valorBusca={busca} 
+        onPesquisar={(texto) => setBusca(texto)} 
+      />
+      
       <div className={rolou ? "topo" : ""}>
         <CategoriaBarra dados={categorias} />
       </div>
+
       <div className="main-container">
-        {Object.entries(produtosPorCategoria).map(([categoria, listaProdutos]) => (
-          <div key={categoria} id={categoria} className="category-section">
-            <h2 className="category-title">{categoria}</h2>
-            <div className="product-grid">
-              {listaProdutos.map((prod) => (
-                <ProdutoVitrine
-                  key={prod.id_produto}
-                  id_produto={prod.id_produto}
-                  nome={prod.nome}
-                  preco={prod.preco}
-                  foto={prod.url_foto || imagemPadrao}
-                  descricao={prod.descricao}
-                />
-              ))}
+        {Object.entries(produtosPorCategoria).length > 0 ? (
+          Object.entries(produtosPorCategoria).map(([categoria, listaProdutos]) => (
+            <div key={categoria} id={categoria} className="category-section">
+              <h2 className="category-title">{categoria}</h2>
+              <div className="product-grid">
+                {listaProdutos.map((prod) => (
+                  <ProdutoVitrine
+                    key={prod.id_produto}
+                    id_produto={prod.id_produto}
+                    nome={prod.nome}
+                    preco={prod.preco}
+                    foto={prod.url_foto || imagemPadrao}
+                    descricao={prod.descricao}
+                  />
+                ))}
+              </div>
             </div>
+          ))
+        ) : (
+          <div className="busca-vazia">
+            <p>Nenhum produto encontrado para "{busca}"</p>
           </div>
-        ))}
+        )}
       </div>
     </div>
   );

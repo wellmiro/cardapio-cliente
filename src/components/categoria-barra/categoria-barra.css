@@ -1,18 +1,18 @@
-/* Posição padrão (quando abre o site) */
+/* categoria-barra.css */
+
 .categoria-wrapper {
     background-color: #ffffff;
     width: 100%;
     padding: 10px 0;
     position: fixed;
-    top: 100px; /* Alinhado com seu cabeçalho original */
+    top: 100px; 
     left: 0;
-    z-index: 9999; 
+    z-index: 999; 
     border-bottom: 1px solid #f2f2f2;
     box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.05);
     transition: top 0.2s ease-in-out;
 }
 
-/* Quando rola para baixo, o React adiciona essa classe e a barra sobe */
 .topo .categoria-wrapper {
     top: 0 !important;
 }
@@ -30,9 +30,17 @@
     background-color: #fff;
 }
 
-.categoria-barra::-webkit-scrollbar { display: none; }
+.categoria-barra::-webkit-scrollbar { 
+    display: none; 
+}
 
-.categoria-item { display: flex; flex-direction: column; align-items: center; min-width: 80px; }
+.categoria-item { 
+    display: flex; 
+    flex-direction: column; 
+    align-items: center; 
+    min-width: 80px; 
+    cursor: pointer;
+}
 
 .categoria-item img {
     width: 65px !important;
@@ -44,4 +52,70 @@
     box-shadow: 0px 3px 8px rgba(0, 0, 0, 0.15);
 }
 
-.categoria-item span { font-size: 13px; font-weight: 600; color: #333; }
+.categoria-item span { 
+    font-size: 13px; 
+    font-weight: 600; 
+    color: #333; 
+}
+
+/* ============================================================
+   REGRAS PARA CELULAR - AJUSTE DO ESPAÇO GIGANTE
+   ============================================================ */
+
+@media (max-width: 900px) {
+    .categoria-wrapper {
+        /* Se 155px ficou muito longe, tente 148px ou 150px */
+        top: 150px !important; 
+        padding: 0 !important;
+        height: 75px !important; 
+        display: flex;
+        align-items: center;
+        background-color: #fff;
+        border-bottom: 1px solid #eee;
+    }
+
+    .categoria-barra {
+        margin: 0 !important;
+        padding: 0 35px !important;
+        border: none !important;
+        border-radius: 0 !important;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .categoria-item img {
+        width: 42px !important;
+        height: 42px !important;
+        margin-bottom: 2px !important;
+    }
+
+    .categoria-item span {
+        font-size: 10px !important;
+    }
+
+    /* Setas Pretas */
+    .categoria-wrapper::before {
+        content: '‹';
+        position: absolute;
+        left: 5px;
+        top: 50%;
+        transform: translateY(-55%);
+        font-size: 50px;
+        color: #000;
+        z-index: 1000;
+    }
+
+    .categoria-wrapper::after {
+        content: '›';
+        position: absolute;
+        right: 5px;
+        top: 50%;
+        transform: translateY(-55%);
+        font-size: 50px;
+        color: #000;
+        z-index: 1000;
+    }
+}

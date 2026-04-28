@@ -24,7 +24,7 @@
 }
 
 .main-container {
-    padding-top: 180px;
+    padding-top: 100px;
     padding-bottom: 100px;
     width: 100%;
     margin: 0 auto;
@@ -34,7 +34,7 @@
 }
 
 .category-section {
-    margin-bottom: 50px;
+    margin-bottom: 25px;
     width: 100%;
     max-width: 1200px;
     padding: 0 20px;
@@ -104,4 +104,44 @@
     margin-top: 15px;
     color: #666;
     font-weight: 500;
+}
+
+/* home.css */
+
+/* home.css */
+
+/* home.css */
+
+/* home.css */
+
+@media (max-width: 900px) {
+    .main-container {
+        /* Reduzi para 175px. Se o título esconder atrás da barra, suba para 180px */
+        padding-top: 100px !important; 
+        padding-bottom: 30px;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .category-section {
+        /* Zerei tudo que sobrava aqui */
+        margin-top: 0 !important;
+        margin-bottom: 5px !important;
+        padding: 0 15px !important;
+    }
+
+    .category-title {
+        /* Forcei o título a colar no topo da seção dele */
+        margin-top: 0 !important;
+        padding-top: 0 !important;
+        margin-bottom: 12px !important;
+        font-size: 1.2rem !important;
+        line-height: 1;
+        border-left: 4px solid #E84F3D; /* Deixei a bordinha um pouco mais fina */
+    }
+
+    .product-grid {
+        gap: 10px !important; /* Aproxima os cards dos produtos */
+    }
 }

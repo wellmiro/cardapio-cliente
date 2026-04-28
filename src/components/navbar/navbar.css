@@ -1,49 +1,106 @@
+/* NAVBAR 99BURGER - COMPLETA E AJUSTADA */
+
 .navbar {
     width: 100%;
-    height: 150px;
+    min-height: 100px; 
+    height: auto;
     background-image: url("../../assets/bg-navbar.png");
-    background-size: contain;
-    background-repeat: repeat-x;
-    display: flex; /* Adicionado para alinhar logo e menu */
-    justify-content: space-between; /* Logo na esquerda, Menu na direita */
-    align-items: flex-start;
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-position: center;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 30px;
+    box-sizing: border-box;
+    flex-wrap: wrap; 
+    position: relative;
+    z-index: 1001; /* Garante que fique acima das categorias */
+}
+
+.navbar-logo-section {
+    display: flex;
+    align-items: center;
+    order: 1;
 }
 
 .logotipo {
-    max-width: 100px;
-    width: 100px;
-    padding: 10px 10px 10px 20px;
+    max-width: 120px;
+    height: auto;
+}
+
+.busca-wrapper {
+    margin: 0 20px;
+    flex: 1; 
+    max-width: 500px;
+    order: 2;
+    box-sizing: border-box;
 }
 
 .menu {
-    padding: 20px; /* Ajustado */
     display: flex;
     align-items: center;
+    gap: 15px;
+    order: 3;
 }
 
+/* --- ESTILOS DOS BOTÕES (DESKTOP E GERAL) --- */
 .menu a {
     color: #000000;
-    margin-right: 25px;
     text-decoration: none;
     font-weight: bold;
-}
-
-.menu a:hover {
-    color: #d24434;
+    font-size: 0.9rem;
+    padding: 8px 16px;
+    border-radius: 8px;
+    background-color: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    white-space: nowrap;
 }
 
 .btn-red {
     background-color: #d24434;
-    color: white;
+    color: white !important;
     border: none;
     padding: 8px 15px;
-    border-radius: 5px;
+    border-radius: 8px;
     display: flex;
     align-items: center;
     cursor: pointer;
+    text-decoration: none;
+    font-weight: bold;
 }
 
-.icon {
-    width: 20px;
-    margin-right: 8px;
+/* ============================================================
+   REGRAS SÓ PARA CELULAR (MOBILE)
+   ============================================================ */
+@media (max-width: 900px) {
+    .navbar {
+        /* Aumentei o padding inferior da navbar */
+        padding: 15px 20px 20px 20px !important; 
+    }
+
+    .busca-wrapper {
+        order: 4 !important; 
+        width: calc(100% - 10px) !important; 
+        max-width: none !important;
+        
+        /* AQUI ESTÁ O SEU MARGIN BOTTOM DE 10px (coloquei 15px para garantir) */
+        margin: 15px 5px 15px 5px !important; 
+        
+        flex: none !important;
+        box-sizing: border-box !important;
+    }
+
+    .logotipo {
+        max-width: 90px;
+    }
+
+    .menu {
+        gap: 8px;
+    }
+
+    .menu a, .btn-red {
+        padding: 8px 12px;
+        font-size: 0.85rem;
+    }
 }

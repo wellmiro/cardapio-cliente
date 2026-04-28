@@ -1,0 +1,47 @@
+.busca-wrapper {
+    display: flex;
+    align-items: center;
+    background-color: #f3f3f3;
+    border-radius: 12px;
+    padding: 10px 15px; /* Aumentei um pouco o padding interno */
+    border: 1px solid #e2e2e2;
+    transition: all 0.3s ease;
+    margin-bottom: 100px;
+}
+
+.busca-wrapper:focus-within {
+    background-color: #ffffff;
+    border-color: #d24434;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+}
+
+.busca-icon {
+    width: 18px;
+    height: 18px;
+    color: #888;
+    margin-right: 8px;
+}
+
+.busca-input {
+    border: none;
+    background: transparent;
+    width: 100%;
+    font-size: 15px;
+    outline: none;
+    color: #333;
+}
+
+.btn-limpar-busca {
+    background: none;
+    border: none;
+    font-size: 16px;
+    color: #999;
+    cursor: pointer;
+}
+
+/* Ajuste para telas pequenas */
+@media (max-width: 600px) {
+    .busca-wrapper {
+        margin: 0 10px;
+    }
+}

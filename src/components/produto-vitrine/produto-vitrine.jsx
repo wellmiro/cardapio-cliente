@@ -34,6 +34,8 @@ function ProdutoVitrine(props) {
             const copia = { ...prev };
             const atual = copia[item.id_item] || { ...item, qtd_item: 0, id_opcao };
             let novaQtd = atual.qtd_item + delta;
+            
+            // Limite mínimo de -1 (para o "SEM")
             if (novaQtd < -1) novaQtd = -1;
             
             const totalNoGrupo = Object.values(copia)
@@ -41,8 +43,12 @@ function ProdutoVitrine(props) {
                 .reduce((acc, i) => acc + (i.qtd_item > 0 ? i.qtd_item : 0), 0);
             
             if (delta > 0 && qtd_max && (totalNoGrupo + (novaQtd > 0 ? novaQtd : 0)) > qtd_max) return prev;
-            if (novaQtd === 0) delete copia[item.id_item];
-            else copia[item.id_item] = { ...atual, qtd_item: novaQtd };
+            
+            if (novaQtd === 0) {
+                delete copia[item.id_item];
+            } else {
+                copia[item.id_item] = { ...atual, qtd_item: novaQtd };
+            }
             return copia;
         });
     };
@@ -53,22 +59,32 @@ function ProdutoVitrine(props) {
     const handleAdicionarModal = () => {
         const todos = Object.values(selecionados);
         
-        // Pega os itens -1 e gera o texto "SEM ITEM"
-        const removidos = todos.filter(i => i.qtd_item === -1).map(i => `SEM ${i.nome_item.toUpperCase()}`);
+        // 1. Mapeia os itens removidos (q === -1)
+        const removidos = todos
+            .filter(i => i.qtd_item === -1)
+            .map(i => `SEM ${i.nome_item.toUpperCase()}`);
+        
+        // 2. Mapeia os itens adicionados (q > 0)
+        const adicionadosTexto = todos
+            .filter(i => i.qtd_item > 0)
+            .map(i => `+${i.qtd_item} ${i.nome_item.toUpperCase()}`);
+
+        // Junta tudo para a observação do item
+        let arrayStatus = [...removidos, ...adicionadosTexto];
+        let textoOpcionais = arrayStatus.join(", ");
         
         let obsFinal = obs.trim();
-        if (removidos.length > 0) {
-            const listaRemovidos = removidos.join(", ");
-            obsFinal = obsFinal ? `${obsFinal} (${listaRemovidos})` : listaRemovidos;
+        if (textoOpcionais) {
+            obsFinal = obsFinal ? `${obsFinal} (${textoOpcionais})` : textoOpcionais;
         }
 
         AddItemCart({
             id: props.id_produto,
             nome: props.nome,
-            preco: props.preco + totalAdicionais,
+            preco: props.preco + totalAdicionais, // Valor unitário com adicionais
             foto: fotoProduto,
             qtd: qtd,
-            observacao: obsFinal,
+            observacao: obsFinal, // Vai para pedido_item.observacao
             adicionais: todos.filter(i => i.qtd_item > 0).map(i => ({
                 ...i, 
                 nome_formatado: i.qtd_item > 1 ? `${i.qtd_item}x ${i.nome_item}` : i.nome_item

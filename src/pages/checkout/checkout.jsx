@@ -23,12 +23,12 @@ let DefaultIcon = L.icon({
 L.Marker.prototype.options.icon = DefaultIcon;
 
 // --- CONFIGURAÇÃO DE ORIGEM ---
-const ORIGEM = { lat: -23.962, lng: -47.505 };
-const PRECO_POR_KM = 2.00;
+const ORIGEM = { lat: -24.0189, lng: -47.4988 }; // Turvo, Tapiraí
+const TAXA_BASE_RURAL = 5.00; // Valor fixo só para sair da lanchonete
+const PRECO_POR_KM = 2.50;    // Aumentei um pouco para compensar o terreno
 
-// --- FUNÇÃO DE CÁLCULO DE FRETE ---
 function calcularFrete(lat2, lon2) {
-    const R = 6371; // Raio da Terra em KM
+    const R = 6371; 
     const dLat = (lat2 - ORIGEM.lat) * Math.PI / 180;
     const dLon = (lon2 - ORIGEM.lng) * Math.PI / 180;
     const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
@@ -38,11 +38,11 @@ function calcularFrete(lat2, lon2) {
     
     const distanciaKm = c * R; 
     
-    const parteInteira = Math.floor(distanciaKm);
-    const centavosKm = distanciaKm - parteInteira;
-    const kmFinal = centavosKm <= 0.30 ? parteInteira : parteInteira + 1;
+    // Arredonda SEMPRE para cima (Ex: 2.1km vira 3km)
+    // Isso ajuda a compensar as curvas das estradas de terra
+    const kmFinal = Math.ceil(distanciaKm);
 
-    return kmFinal * PRECO_POR_KM;
+    return TAXA_BASE_RURAL + (kmFinal * PRECO_POR_KM);
 }
 
 function MapRefresher({ center }) {

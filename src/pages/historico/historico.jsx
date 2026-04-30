@@ -22,7 +22,7 @@ function Historico() {
         { cod: "F", label: "Concluído", icone: "✅" }
     ];
 
-    // ✅ Efeito corrigido para não dar erro de dependência e carregar a lista
+    // ✅ Efeito unificado para carregar a lista inicial
     useEffect(() => {
         async function listarPedidos() {
             if (!slug || !sessionId) {
@@ -102,7 +102,7 @@ function Historico() {
                     <h2>Meus Pedidos</h2>
                 </div>
 
-                {/* VERIFICAÇÃO DE LISTA VAZIA */}
+                {/* VERIFICAÇÃO DE LISTA VAZIA OU RENDERIZAÇÃO */}
                 {pedidos.length === 0 ? (
                     <div className="card-pedido" style={{ padding: '40px 20px', textAlign: 'center' }}>
                         <div style={{ fontSize: '3rem', marginBottom: '10px' }}>🍔</div>

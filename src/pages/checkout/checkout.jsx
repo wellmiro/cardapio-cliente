@@ -1,7 +1,7 @@
 import "./checkout.css";
 import Navbar from "../../components/navbar/navbar.jsx";
 import AlertModal from "../../components/alert-modal/AlertModal.jsx";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useContext } from "react";
 import { CartContext } from "../../contexts/cart-context.jsx";
 import api from "../../services/api.js";
 import { useNavigate } from "react-router-dom";
@@ -16,10 +16,12 @@ import iconShadow from "leaflet/dist/images/marker-shadow.png";
 let DefaultIcon = L.icon({ iconUrl: icon, shadowUrl: iconShadow, iconSize: [25, 41], iconAnchor: [12, 41] });
 L.Marker.prototype.options.icon = DefaultIcon;
 
+// Configurações de Frete
 const ORIGEM = { lat: -23.899753126604352, lng: -47.51519888650903 };
 const TAXA_BASE = 5.00;
 const PRECO_POR_KM = 2.50;
 
+// Funções Utilitárias (Fora do Componente)
 function calcularFrete(lat2, lon2) {
     const R = 6371;
     const dLat = (lat2 - ORIGEM.lat) * Math.PI / 180;
@@ -30,11 +32,8 @@ function calcularFrete(lat2, lon2) {
     return TAXA_BASE + km * PRECO_POR_KM;
 }
 
-// Tenta extrair lat/lng de várias formas de texto
 function parsearLocalizacao(texto) {
     const t = texto.trim();
-
-    // Google Maps link: @lat,lng ou q=lat,lng ou ll=lat,lng
     const googleRegex = /@(-?\d+\.\d+),(-?\d+\.\d+)|[?&](?:q|ll)=(-?\d+\.\d+),(-?\d+\.\d+)/;
     const gm = t.match(googleRegex);
     if (gm) {
@@ -43,7 +42,6 @@ function parsearLocalizacao(texto) {
         if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
     }
 
-    // Coordenadas diretas: "-23.123, -47.456" ou "-23.123 -47.456"
     const coordRegex = /(-?\d{1,3}\.\d+)[,\s]+(-?\d{1,3}\.\d+)/;
     const cm = t.match(coordRegex);
     if (cm) {
@@ -52,7 +50,6 @@ function parsearLocalizacao(texto) {
         if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng };
     }
 
-    // Apple Maps: maps.apple.com?ll=lat,lng
     const appleRegex = /ll=(-?\d+\.\d+),(-?\d+\.\d+)/;
     const am = t.match(appleRegex);
     if (am) return { lat: parseFloat(am[1]), lng: parseFloat(am[2]) };
@@ -87,31 +84,30 @@ function ModalSucesso({ onClose }) {
 const fmt = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 export default function Checkout() {
+    // Hooks chamados corretamente dentro do componente
     const { cartItems, totalCart, setCartItems, setTotalCart } = useContext(CartContext);
     const navigate = useNavigate();
 
+    // Estados de Controle de UI
     const [msgAlert, setMsgAlert] = useState("");
     const [showAlert, setShowAlert] = useState(false);
     const [tipoAlert, setTipoAlert] = useState("erro");
     const [showSucesso, setShowSucesso] = useState(false);
     const [enviando, setEnviando] = useState(false);
-
     const [step, setStep] = useState(1);
 
-    // Step 1
+    // Step 1 - Dados Pessoais
     const [nome, setNome] = useState("");
     const [fone, setFone] = useState("");
 
-    // Step 2 — localização
+    // Step 2 — Localização e Endereço
     const [posicao, setPosicao] = useState([ORIGEM.lat, ORIGEM.lng]);
     const [coordenadasConfirmadas, setCoordenadasConfirmadas] = useState(false);
     const [frete, setFrete] = useState(0);
-
     const [cep, setCep] = useState("");
-    const [cepStatus, setCepStatus] = useState(""); // "ok" | "erro" | "buscando"
-
+    const [cepStatus, setCepStatus] = useState(""); 
     const [locInput, setLocInput] = useState("");
-    const [locStatus, setLocStatus] = useState(""); // "ok" | "erro"
+    const [locStatus, setLocStatus] = useState("");
 
     const [endereco, setEndereco] = useState("");
     const [numero, setNumero] = useState("");
@@ -121,14 +117,17 @@ export default function Checkout() {
     const [uf, setUf] = useState("");
     const [referencia, setReferencia] = useState("");
 
-    // Step 3
+    // Step 3 - Pagamento
     const [pagamento, setPagamento] = useState("");
     const [tipoCartao, setTipoCartao] = useState("");
     const [dinheiro, setDinheiro] = useState("");
 
-    const alerta = (msg, tipo = "erro") => { setMsgAlert(msg); setTipoAlert(tipo); setShowAlert(true); };
+    const alerta = (msg, tipo = "erro") => { 
+        setMsgAlert(msg); 
+        setTipoAlert(tipo); 
+        setShowAlert(true); 
+    };
 
-    // Quando obtém coordenadas de qualquer fonte, atualiza mapa, frete e tenta reverse geocode
     async function aplicarCoordenadas(lat, lng) {
         setPosicao([lat, lng]);
         setCoordenadasConfirmadas(true);
@@ -144,16 +143,15 @@ export default function Checkout() {
                 if (!uf) {
                     let estado = data.address.state_code || "";
                     if (!estado && data.address.state) {
-                        const map = { "São Paulo": "SP", "Rio de Janeiro": "RJ", "Minas Gerais": "MG", "Paraná": "PR" };
-                        estado = map[data.address.state] || data.address.state.substring(0, 2).toUpperCase();
+                        const statesMap = { "São Paulo": "SP", "Rio de Janeiro": "RJ", "Minas Gerais": "MG", "Paraná": "PR" };
+                        estado = statesMap[data.address.state] || data.address.state.substring(0, 2).toUpperCase();
                     }
                     setUf(estado.toUpperCase());
                 }
             }
-        } catch { /* silencioso — campos continuam editáveis */ }
+        } catch (e) { console.error("Erro reverse geocode", e); }
     }
 
-    // CEP
     async function handleCep(e) {
         const v = e.target.value.replace(/\D/g, "");
         setCep(v);
@@ -172,7 +170,6 @@ export default function Checkout() {
             setUf(data.uf || "");
             setCepStatus("ok");
 
-            // Tenta mover o mapa
             const geo = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent((data.logradouro || "") + ", " + data.localidade)}`);
             const geoData = await geo.json();
             if (geoData.length > 0) {
@@ -180,7 +177,6 @@ export default function Checkout() {
                 const lng = parseFloat(geoData[0].lon);
                 await aplicarCoordenadas(lat, lng);
             } else {
-                // CEP trouxe o endereço mas não achou no mapa — campos preenchidos mas frete não calculado
                 setCoordenadasConfirmadas(false);
             }
         } catch {
@@ -188,7 +184,6 @@ export default function Checkout() {
         }
     }
 
-    // Colar localização
     async function handleLocInput(e) {
         const v = e.target.value;
         setLocInput(v);
@@ -204,6 +199,7 @@ export default function Checkout() {
         }
     }
 
+    // Validações por Step
     function validarStep1() {
         if (!nome.trim()) { alerta("Por favor, informe seu nome."); return false; }
         if (!fone.trim()) { alerta("Por favor, informe seu WhatsApp."); return false; }
@@ -212,7 +208,7 @@ export default function Checkout() {
 
     function validarStep2() {
         if (!coordenadasConfirmadas) {
-            alerta("Confirme sua localização pelo mapa, CEP ou colando o link. O frete é calculado pela sua localização real.");
+            alerta("Confirme sua localização pelo mapa, CEP ou colando o link.");
             return false;
         }
         if (!numero.trim()) { alerta("O número da casa é obrigatório."); return false; }
@@ -225,7 +221,7 @@ export default function Checkout() {
         if (pagamento === "cartao" && !tipoCartao) { alerta("Selecione Crédito ou Débito."); return false; }
         if (pagamento === "dinheiro") {
             if (!dinheiro) { alerta("Informe o valor para o troco."); return false; }
-            if (Number(dinheiro) < totalCart + frete) { alerta("O valor para troco é menor que o total do pedido."); return false; }
+            if (Number(dinheiro) < totalCart + frete) { alerta("O valor para troco é menor que o total."); return false; }
         }
         return true;
     }
@@ -297,7 +293,6 @@ export default function Checkout() {
             {showSucesso && <ModalSucesso onClose={() => navigate("/historico")} />}
 
             <div className="checkout-wrapper">
-
                 {/* STEPPER */}
                 <div className="stepper">
                     {STEPS.map((label, i) => {
@@ -336,7 +331,6 @@ export default function Checkout() {
                     <div className="box-checkout">
                         <h3 className="box-title">📍 Onde entregamos?</h3>
 
-                        {/* OPÇÃO 1 — CEP */}
                         <div className="loc-opcao">
                             <div className="loc-opcao-titulo">Opção 1 — CEP</div>
                             <div className="input-group">
@@ -353,13 +347,10 @@ export default function Checkout() {
                                     maxLength={8}
                                     className={cepStatus === "erro" ? "input-erro" : cepStatus === "ok" ? "input-ok" : ""}
                                 />
-                                {cepStatus === "erro" && (
-                                    <p className="campo-dica-erro">CEP não encontrado. Use o mapa ou cole sua localização abaixo.</p>
-                                )}
+                                {cepStatus === "erro" && <p className="campo-dica-erro">CEP não encontrado. Use o mapa abaixo.</p>}
                             </div>
                         </div>
 
-                        {/* OPÇÃO 2 — COLAR LOCALIZAÇÃO */}
                         <div className="loc-opcao">
                             <div className="loc-opcao-titulo">Opção 2 — Colar localização</div>
                             <div className="input-group">
@@ -371,24 +362,14 @@ export default function Checkout() {
                                 <input
                                     value={locInput}
                                     onChange={handleLocInput}
-                                    placeholder="Cole aqui o link do Google Maps, Apple Maps ou coordenadas (-23.456, -47.123)"
+                                    placeholder="Cole aqui o link do Google Maps ou coordenadas"
                                     className={locStatus === "erro" ? "input-erro" : locStatus === "ok" ? "input-ok" : ""}
                                 />
-                                <p className="campo-dica">
-                                    No Google Maps: toque no pino → compartilhar → copiar link. Ou toque e segure no mapa → copie as coordenadas.
-                                </p>
-                                {locStatus === "erro" && (
-                                    <p className="campo-dica-erro">Formato não reconhecido. Tente um link do Google Maps ou coordenadas como: -23.456, -47.123</p>
-                                )}
                             </div>
                         </div>
 
-                        {/* OPÇÃO 3 — MAPA */}
                         <div className="loc-opcao">
                             <div className="loc-opcao-titulo">Opção 3 — Arraste o mapa</div>
-                            <p className="campo-dica" style={{ marginBottom: 8 }}>
-                                Arraste o marcador vermelho até a sua casa. O frete será calculado pela distância real.
-                            </p>
                             <div className="mapa-container">
                                 <MapContainer center={posicao} zoom={15} style={{ height: "100%", width: "100%" }}>
                                     <LayersControl position="topright">
@@ -397,9 +378,6 @@ export default function Checkout() {
                                         </LayersControl.BaseLayer>
                                         <LayersControl.BaseLayer name="Satélite">
                                             <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" attribution="© Esri" />
-                                        </LayersControl.BaseLayer>
-                                        <LayersControl.BaseLayer name="Terreno">
-                                            <TileLayer url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png" attribution="© OpenTopoMap" />
                                         </LayersControl.BaseLayer>
                                     </LayersControl>
                                     <Marker
@@ -417,26 +395,15 @@ export default function Checkout() {
                             </div>
                         </div>
 
-                        {/* FRETE CALCULADO */}
                         {coordenadasConfirmadas && (
-                            <div className="frete-badge">
-                                🛵 Taxa de entrega calculada: <strong>{fmt(frete)}</strong>
-                            </div>
+                            <div className="frete-badge">🛵 Taxa de entrega: <strong>{fmt(frete)}</strong></div>
                         )}
 
-                        {!coordenadasConfirmadas && (
-                            <div className="frete-aviso">
-                                ⚠️ Confirme sua localização acima para calcular o frete.
-                            </div>
-                        )}
-
-                        {/* CAMPOS DE ENDEREÇO — sempre editáveis */}
                         <div className="secao-label espacamento-top">Detalhes do endereço</div>
-
                         <div className="input-row espacamento-top">
                             <div className="input-group" style={{ flex: 4 }}>
-                                <label>Rua / Logradouro</label>
-                                <input value={endereco} onChange={e => setEndereco(e.target.value)} placeholder="Nome da rua (opcional)" />
+                                <label>Rua</label>
+                                <input value={endereco} onChange={e => setEndereco(e.target.value)} placeholder="Nome da rua" />
                             </div>
                             <div className="input-group" style={{ flex: 1 }}>
                                 <label>Nº <span className="obrig">*</span></label>
@@ -445,32 +412,8 @@ export default function Checkout() {
                         </div>
 
                         <div className="input-group espacamento-top">
-                            <label>Complemento <span className="opcional">(opcional)</span></label>
-                            <input value={complemento} onChange={e => setComplemento(e.target.value)} placeholder="Apto, bloco, casa..." />
-                        </div>
-
-                        <div className="input-group espacamento-top">
                             <label>Ponto de Referência <span className="obrig">*</span></label>
-                            <input
-                                value={referencia}
-                                onChange={e => setReferencia(e.target.value)}
-                                placeholder="Ex: próximo ao mercado X, portão azul, casa da esquina..."
-                            />
-                        </div>
-
-                        <div className="input-row espacamento-top">
-                            <div className="input-group" style={{ flex: 1 }}>
-                                <label>Bairro</label>
-                                <input value={bairro} onChange={e => setBairro(e.target.value)} placeholder="Bairro" />
-                            </div>
-                            <div className="input-group" style={{ flex: 2 }}>
-                                <label>Cidade</label>
-                                <input value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Cidade" />
-                            </div>
-                            <div className="input-group" style={{ flex: 0.6 }}>
-                                <label>UF</label>
-                                <input value={uf} onChange={e => setUf(e.target.value)} maxLength={2} placeholder="SP" />
-                            </div>
+                            <input value={referencia} onChange={e => setReferencia(e.target.value)} placeholder="Ex: Portão azul, próximo ao mercado..." />
                         </div>
 
                         <div className="footer-buttons">
@@ -483,21 +426,10 @@ export default function Checkout() {
                 {/* STEP 3 — PAGAMENTO */}
                 {step === 3 && (
                     <div className="box-checkout">
-                        <h3 className="box-title">💳 Forma de Pagamento</h3>
-
+                        <h3 className="box-title">💳 Pagamento</h3>
                         <div className="payment-selector">
-                            {[
-                                { id: "pix", label: "⚡ PIX" },
-                                { id: "cartao", label: "💳 Cartão" },
-                                { id: "dinheiro", label: "💵 Dinheiro" }
-                            ].map(op => (
-                                <button
-                                    key={op.id}
-                                    className={`pay-btn ${pagamento === op.id ? "active" : ""}`}
-                                    onClick={() => setPagamento(op.id)}
-                                >
-                                    {op.label}
-                                </button>
+                            {[{ id: "pix", label: "⚡ PIX" }, { id: "cartao", label: "💳 Cartão" }, { id: "dinheiro", label: "💵 Dinheiro" }].map(op => (
+                                <button key={op.id} className={`pay-btn ${pagamento === op.id ? "active" : ""}`} onClick={() => setPagamento(op.id)}>{op.label}</button>
                             ))}
                         </div>
 
@@ -510,24 +442,11 @@ export default function Checkout() {
 
                         {pagamento === "dinheiro" && (
                             <div className="input-group espacamento-top">
-                                <label>Troco para quanto? <span className="obrig">*</span></label>
-                                <input
-                                    type="number"
-                                    value={dinheiro}
-                                    onChange={e => setDinheiro(e.target.value)}
-                                    placeholder={`Mínimo ${fmt(totalCart + frete)}`}
-                                />
+                                <label>Troco para quanto?</label>
+                                <input type="number" value={dinheiro} onChange={e => setDinheiro(e.target.value)} placeholder="Valor em dinheiro" />
                                 {dinheiro && Number(dinheiro) >= totalCart + frete && (
-                                    <p className="troco-info">
-                                        Troco: <strong>{fmt(Number(dinheiro) - (totalCart + frete))}</strong>
-                                    </p>
+                                    <p className="troco-info">Troco: <strong>{fmt(Number(dinheiro) - (totalCart + frete))}</strong></p>
                                 )}
-                            </div>
-                        )}
-
-                        {pagamento === "pix" && (
-                            <div className="pix-info espacamento-top">
-                                ⚡ Você receberá as instruções de pagamento após confirmar o pedido.
                             </div>
                         )}
 
@@ -541,38 +460,11 @@ export default function Checkout() {
                 {/* STEP 4 — REVISÃO */}
                 {step === 4 && (
                     <div className="box-checkout">
-                        <h3 className="box-title">🧾 Revisão do Pedido</h3>
-
+                        <h3 className="box-title">🧾 Revisão</h3>
                         <div className="revisao-secao">
-                            <p className="revisao-titulo">👤 Cliente</p>
                             <p><strong>{nome}</strong> — {fone}</p>
-                        </div>
-
-                        <div className="revisao-secao">
-                            <p className="revisao-titulo">📍 Endereço</p>
-                            <p>{[endereco, numero, complemento].filter(Boolean).join(", ")}</p>
-                            <p style={{ color: '#777', fontSize: '0.85rem' }}>{[bairro, cidade, uf].filter(Boolean).join(" — ")}</p>
-                            {referencia && <p style={{ color: '#E84F3D', fontSize: '0.85rem', marginTop: 4 }}>📌 {referencia}</p>}
-                            <a
-                                href={`https://www.google.com/maps?q=${posicao[0]},${posicao[1]}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="link-mapa"
-                            >
-                                🗺️ Ver no mapa
-                            </a>
-                        </div>
-
-                        <div className="revisao-secao">
-                            <p className="revisao-titulo">💳 Pagamento</p>
-                            <p style={{ fontWeight: 700, textTransform: 'uppercase' }}>
-                                {pagamento} {tipoCartao && `(${tipoCartao})`}
-                            </p>
-                            {pagamento === "dinheiro" && dinheiro && (
-                                <p style={{ color: '#555', fontSize: '0.85rem' }}>
-                                    Troco para {fmt(Number(dinheiro))} — Troco: {fmt(Number(dinheiro) - (totalCart + frete))}
-                                </p>
-                            )}
+                            <p>{endereco}, {numero} {complemento && `- ${complemento}`}</p>
+                            <p>{bairro} - {cidade}/{uf}</p>
                         </div>
 
                         <div className="revisao-secao">
@@ -580,44 +472,23 @@ export default function Checkout() {
                             {cartItems.map((item, i) => (
                                 <div key={i} className="revisao-produto-item">
                                     <div className="revisao-produto-linha">
-                                        <span><strong>{item.qtd}x</strong> {item.nome}</span>
+                                        <span>{item.qtd}x {item.nome}</span>
                                         <span>{fmt(item.preco * item.qtd)}</span>
                                     </div>
-                                    {item.adicionais?.length > 0 && (
-                                        <p className="revisao-adicionais">+ {item.adicionais.map(a => a.nome_item).join(", ")}</p>
-                                    )}
-                                    {item.observacao && <p className="revisao-obs">Obs: {item.observacao}</p>}
                                 </div>
                             ))}
                         </div>
 
                         <div className="valores-box">
-                            <div className="valor-linha">
-                                <span>Subtotal</span>
-                                <span>{fmt(totalCart)}</span>
-                            </div>
-                            <div className="valor-linha">
-                                <span>🛵 Entrega</span>
-                                <span>{fmt(frete)}</span>
-                            </div>
-                            <div className="valor-linha total">
-                                <span>Total a Pagar</span>
-                                <span>{fmt(totalCart + frete)}</span>
-                            </div>
+                            <div className="valor-linha"><span>Subtotal</span><span>{fmt(totalCart)}</span></div>
+                            <div className="valor-linha"><span>Entrega</span><span>{fmt(frete)}</span></div>
+                            <div className="valor-linha total"><span>Total</span><span>{fmt(totalCart + frete)}</span></div>
                         </div>
 
                         <div className="footer-buttons">
                             <button className="btn-back" onClick={navigateBack} disabled={enviando}>← Voltar</button>
-                            <button
-                                className={`btn-checkout btn-finalizar ${enviando ? "enviando" : ""}`}
-                                onClick={finalizarPedido}
-                                disabled={enviando}
-                            >
-                                {enviando ? (
-                                    <><span className="spinner" /> Enviando...</>
-                                ) : (
-                                    "🚀 Finalizar e Enviar"
-                                )}
+                            <button className={`btn-checkout ${enviando ? "enviando" : ""}`} onClick={finalizarPedido} disabled={enviando}>
+                                {enviando ? "Enviando..." : "🚀 Finalizar Pedido"}
                             </button>
                         </div>
                     </div>

@@ -14,7 +14,7 @@
     box-sizing: border-box;
     flex-wrap: wrap; 
     position: relative;
-    z-index: 1001;
+    z-index: 998;
     overflow: hidden;
 }
 

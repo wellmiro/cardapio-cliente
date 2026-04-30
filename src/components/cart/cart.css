@@ -45,3 +45,13 @@ body.cart-open .topo {
         padding-right: 0 !important;
     }
 }
+
+/* FORÇA A SACOLA A FICAR ACIMA DE TUDO */
+.dock-right {
+    z-index: 99999 !important;
+}
+
+body.cart-open .categoria-wrapper {
+    z-index: 0 !important;
+    visibility: hidden !important;
+}

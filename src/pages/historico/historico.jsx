@@ -22,20 +22,26 @@ function Historico() {
         { cod: "F", label: "Concluído", icone: "✅" }
     ];
 
+    // ✅ Efeito corrigido para não dar erro de dependência e carregar a lista
     useEffect(() => {
-        if (!slug || !sessionId) {
-            setLoadingLista(false);
-            return;
+        async function listarPedidos() {
+            if (!slug || !sessionId) {
+                setLoadingLista(false);
+                return;
+            }
+
+            try {
+                const resp = await api.get(`/pedidos/historico/${slug}/${sessionId}`);
+                setPedidos(resp.data);
+            } catch (err) {
+                console.error("Erro ao listar pedidos:", err);
+            } finally {
+                setLoadingLista(false);
+            }
         }
+
         listarPedidos();
     }, [slug, sessionId]);
-
-    const listarPedidos = () => {
-        api.get(`/pedidos/historico/${slug}/${sessionId}`)
-            .then(resp => setPedidos(resp.data))
-            .catch(err => console.error("Erro lista:", err))
-            .finally(() => setLoadingLista(false));
-    }
 
     const handleExpandir = async (id_pedido) => {
         if (idExpandido === id_pedido) {
@@ -68,6 +74,7 @@ function Historico() {
         return isNaN(numero) || numero <= 0 ? 1 : numero;
     };
 
+    // 🔥 TELA DE CARREGAMENTO (SKELETON)
     if (loadingLista) {
         return (
             <div className="historico-page">
@@ -87,6 +94,7 @@ function Historico() {
             <Navbar />
 
             <div className="container">
+                {/* TOPO COM VOLTAR */}
                 <div className="topo-historico">
                     <button className="btn-voltar" onClick={() => navigate(`/cardapio_digital/${slug}`)}>
                         ← Voltar
@@ -94,39 +102,50 @@ function Historico() {
                     <h2>Meus Pedidos</h2>
                 </div>
 
+                {/* VERIFICAÇÃO DE LISTA VAZIA */}
                 {pedidos.length === 0 ? (
-                    <div className="card-pedido" style={{padding: '30px', textAlign: 'center'}}>
-                        <p style={{color: '#666'}}>Você ainda não fez nenhum pedido.</p>
+                    <div className="card-pedido" style={{ padding: '40px 20px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '3rem', marginBottom: '10px' }}>🍔</div>
+                        <p style={{ color: '#666', fontWeight: '500' }}>Você ainda não fez nenhum pedido.</p>
+                        <button 
+                            className="btn-voltar" 
+                            style={{ margin: '20px auto', display: 'inline-block' }}
+                            onClick={() => navigate(`/cardapio_digital/${slug}`)}
+                        >
+                            Ir para o Cardápio
+                        </button>
                     </div>
                 ) : (
                     pedidos.map(p => (
                         <div key={p.id_pedido} className="card-pedido">
                             
-                            {/* CABEÇALHO DO CARD */}
+                            {/* CABEÇALHO DO CARD (RESUMO) */}
                             <div className="resumo-pedido" onClick={() => handleExpandir(p.id_pedido)}>
                                 <div className="info-principal">
                                     <strong>Pedido #{p.id_pedido}</strong>
                                     <p>{p.dt_pedido}</p>
                                 </div>
                                 
-                                <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                                     <span className={`badge-status status-${p.status || 'A'}`}>
                                         {ETAPAS.find(e => e.cod === (p.status || 'A'))?.label}
                                     </span>
-                                    <span style={{fontSize: '1.2rem'}}>{idExpandido === p.id_pedido ? "▲" : "▼"}</span>
+                                    <span style={{ fontSize: '1.2rem', color: '#cbd5e0' }}>
+                                        {idExpandido === p.id_pedido ? "▲" : "▼"}
+                                    </span>
                                 </div>
                             </div>
 
-                            {/* CORPO EXPANSÍVEL */}
+                            {/* CORPO EXPANSÍVEL (DETALHES) */}
                             {idExpandido === p.id_pedido && (
                                 <div className="detalhes-container">
                                     {loadingDetalhes ? (
-                                        <div style={{textAlign: 'center', padding: '20px', color: '#E84F3D', fontWeight: 'bold'}}>
-                                            Atualizando status...
+                                        <div style={{ textAlign: 'center', padding: '30px', color: '#E84F3D' }}>
+                                            <div className="mini-loader">Carregando detalhes...</div>
                                         </div>
                                     ) : detalhes ? (
                                         <>
-                                            {/* TIMELINE */}
+                                            {/* LINHA DO TEMPO (STATUS) */}
                                             <div className="timeline">
                                                 {ETAPAS.map((etapa, index) => {
                                                     const indexAtual = ETAPAS.findIndex(e => e.cod === detalhes.status);
@@ -140,17 +159,23 @@ function Historico() {
                                                 })}
                                             </div>
 
-                                            {/* LISTA DE PRODUTOS */}
+                                            {/* LISTAGEM DOS PRODUTOS COMPRADOS */}
                                             <div className="itens-lista">
-                                                <small style={{color: '#a0aec0', fontWeight: 'bold', textTransform: 'uppercase', fontSize: '0.65rem'}}>Itens do Pedido</small>
+                                                <small style={{ color: '#a0aec0', fontWeight: 'bold', textTransform: 'uppercase', fontSize: '0.65rem', letterSpacing: '0.5px' }}>
+                                                    Resumo dos Itens
+                                                </small>
+                                                
                                                 {detalhes.itens?.map((item, i) => (
                                                     <div key={i} className="item-linha">
-                                                        <span><span className="item-qtd">{formatQtd(item.qtd)}x</span> {item.nome_produto}</span>
+                                                        <span>
+                                                            <span className="item-qtd">{formatQtd(item.qtd)}x</span> 
+                                                            {item.nome_produto}
+                                                        </span>
                                                         <span>{fmt(item.vl_total)}</span>
                                                     </div>
                                                 ))}
 
-                                                {/* RESUMO FINANCEIRO */}
+                                                {/* ÁREA FINANCEIRA DO PEDIDO */}
                                                 <div className="resumo-valores">
                                                     <div className="valor-linha">
                                                         <span>Subtotal</span>
@@ -158,21 +183,28 @@ function Historico() {
                                                     </div>
                                                     <div className="valor-linha">
                                                         <span>Taxa de Entrega</span>
-                                                        <span>{detalhes.vl_entrega > 0 ? fmt(detalhes.vl_entrega) : "Grátis"}</span>
+                                                        <span style={{ color: detalhes.vl_entrega > 0 ? '#718096' : '#38a169', fontWeight: detalhes.vl_entrega > 0 ? '400' : 'bold' }}>
+                                                            {detalhes.vl_entrega > 0 ? fmt(detalhes.vl_entrega) : "Grátis"}
+                                                        </span>
                                                     </div>
                                                     <div className="total-linha">
-                                                        <span>Total</span>
+                                                        <span>Total do Pedido</span>
                                                         <span>{fmt(detalhes.vl_total)}</span>
                                                     </div>
                                                 </div>
                                             </div>
                                             
-                                            <p style={{fontSize: '0.75rem', color: '#cbd5e0', marginTop: '15px', textAlign: 'center'}}>
-                                                ID da Sessão: {sessionId.substring(0,8)}...
-                                            </p>
+                                            {/* RODAPÉ TÉCNICO DO PEDIDO */}
+                                            <div style={{ marginTop: '20px', textAlign: 'center', borderTop: '1px solid #f7fafc', paddingTop: '10px' }}>
+                                                <p style={{ fontSize: '0.7rem', color: '#cbd5e0' }}>
+                                                    Sessão: {sessionId?.substring(0, 12)}...
+                                                </p>
+                                            </div>
                                         </>
                                     ) : (
-                                        <p>Não foi possível carregar os detalhes.</p>
+                                        <div style={{ padding: '20px', textAlign: 'center', color: '#e53e3e' }}>
+                                            Ops! Não conseguimos carregar os dados deste pedido.
+                                        </div>
                                     )}
                                 </div>
                             )}

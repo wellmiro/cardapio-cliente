@@ -1,7 +1,7 @@
 import "./checkout.css";
 import Navbar from "../../components/navbar/navbar.jsx";
 import AlertModal from "../../components/alert-modal/AlertModal.jsx";
-import { useContext, useState, useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { CartContext } from "../../contexts/cart-context.jsx";
 import api from "../../services/api.js";
 import { useNavigate } from "react-router-dom";

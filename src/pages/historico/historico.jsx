@@ -177,16 +177,20 @@ function Historico() {
 
                                                 {/* ÁREA FINANCEIRA DO PEDIDO */}
                                                 <div className="resumo-valores">
-                                                    <div className="valor-linha">
-                                                        <span>Subtotal</span>
-                                                        <span>{fmt(detalhes.vl_total - (detalhes.vl_entrega || 0))}</span>
-                                                    </div>
-                                                    <div className="valor-linha">
-                                                        <span>Taxa de Entrega</span>
-                                                        <span style={{ color: detalhes.vl_entrega > 0 ? '#718096' : '#38a169', fontWeight: detalhes.vl_entrega > 0 ? '400' : 'bold' }}>
-                                                            {detalhes.vl_entrega > 0 ? fmt(detalhes.vl_entrega) : "Grátis"}
-                                                        </span>
-                                                    </div>
+                                    
+<div className="valor-linha">
+    <span>Subtotal</span>
+    <span>{fmt((detalhes.vl_subtotal ?? detalhes.vl_total) - (Number(detalhes.vl_entrega) || 0))}</span>
+</div>
+<div className="valor-linha">
+    <span>Taxa de Entrega</span>
+    <span style={{
+        color: Number(detalhes.vl_entrega) > 0 ? '#718096' : '#38a169',
+        fontWeight: Number(detalhes.vl_entrega) > 0 ? '400' : 'bold'
+    }}>
+        {Number(detalhes.vl_entrega) > 0 ? fmt(Number(detalhes.vl_entrega)) : "Grátis"}
+    </span>
+</div>
                                                     <div className="total-linha">
                                                         <span>Total do Pedido</span>
                                                         <span>{fmt(detalhes.vl_total)}</span>

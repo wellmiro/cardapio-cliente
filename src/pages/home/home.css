@@ -1,147 +1,87 @@
-/* src/pages/home/home.css */
+/* ===== TELA FECHADO — colar no final do home.css ===== */
 
-.center-page {
+.fechado-page {
+    min-height: 100vh;
+    background: linear-gradient(160deg, #0f0f1a 0%, #1a1a2e 60%, #16213e 100%);
     display: flex;
-    flex-direction: column;
-    justify-content: center;
     align-items: center;
-    height: 100vh;
-    width: 100%;
+    justify-content: center;
+    padding: 20px;
 }
 
-.loader {
-    border: 6px solid #f3f3f3;
-    border-top: 6px solid #E84F3D;
-    border-radius: 50%;
-    width: 50px;
-    height: 50px;
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-.main-container {
-    padding-top: 100px;
-    padding-bottom: 100px;
-    width: 100%;
-    margin: 0 auto;
-    display: flex;
-    flex-direction: column;
-    align-items: center; /* Centraliza as categorias */
-}
-
-.category-section {
-    margin-bottom: 25px;
-    width: 100%;
-    max-width: 1200px;
-    padding: 0 20px;
-    box-sizing: border-box;
-}
-
-.category-title {
-    font-size: 1.6rem;
-    font-weight: 600;
-    color: #333;
-    margin-bottom: 25px;
-    padding-left: 10px;
-    border-left: 5px solid #E84F3D;
-    text-align: left;
-}
-
-.product-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 20px;
-    justify-content: center; /* ESSENCIAL: Mantém os cards no centro */
-    align-items: flex-start;
-    width: 100%;
-}
-
-.topo {
-    position: fixed;
-    top: 0;
-    width: 100%;
-    z-index: 999;
-    background-color: #fff;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-}
-
-/* ... seus estilos anteriores ... */
-
-.error-title {
-    color: #333;
-    margin-bottom: 20px;
-    font-size: 1.2rem;
+.fechado-card {
     text-align: center;
-    padding: 0 20px;
+    max-width: 360px;
+    width: 100%;
+    animation: fadeInUp 0.5s ease;
 }
 
-.btn-recarregar {
-    background-color: #E84F3D;
-    color: white;
-    border: none;
-    padding: 12px 25px;
-    font-size: 1rem;
+.fechado-lua {
+    font-size: 5rem;
+    display: block;
+    margin-bottom: 20px;
+    animation: balanco 4s ease-in-out infinite;
+}
+
+.fechado-card h1 {
+    color: #fff;
+    font-size: 2rem;
+    font-weight: 800;
+    margin: 0 0 10px;
+    letter-spacing: -0.5px;
+}
+
+.fechado-msg {
+    color: #718096;
+    font-size: 0.95rem;
+    margin: 0 0 32px;
+}
+
+.fechado-horario-destaque {
+    background: rgba(232, 79, 61, 0.1);
+    border: 2px solid rgba(232, 79, 61, 0.4);
+    border-radius: 16px;
+    padding: 20px 30px;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 24px;
+}
+
+.fechado-label {
+    color: #a0aec0;
+    font-size: 0.78rem;
     font-weight: 600;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: background 0.3s ease;
-    box-shadow: 0 4px 10px rgba(232, 79, 61, 0.3);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
 }
 
-.btn-recarregar:hover {
-    background-color: #d14434;
+.fechado-hora {
+    color: #E84F3D;
+    font-size: 2.8rem;
+    font-weight: 900;
+    line-height: 1;
+    letter-spacing: -1px;
 }
 
-.btn-recarregar:active {
-    transform: scale(0.98);
+.fechado-rodape {
+    color: #4a5568;
+    font-size: 0.82rem;
+    margin: 0;
 }
 
-.loading-text {
-    margin-top: 15px;
-    color: #666;
-    font-weight: 500;
+.fechado-rodape strong {
+    color: #718096;
 }
 
-/* home.css */
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
 
-/* home.css */
-
-/* home.css */
-
-/* home.css */
-
-@media (max-width: 900px) {
-    .main-container {
-        /* Reduzi para 175px. Se o título esconder atrás da barra, suba para 180px */
-        padding-top: 100 !important; 
-        padding-bottom: 30px;
-        width: 100%;
-        display: flex;
-        flex-direction: column;
-    }
-
-    .category-section {
-        /* Zerei tudo que sobrava aqui */
-        margin-top: 0 !important;
-        margin-bottom: 5px !important;
-        padding: 0 15px !important;
-    }
-
-    .category-title {
-        /* Forcei o título a colar no topo da seção dele */
-        margin-top: 0 !important;
-        padding-top: 0 !important;
-        margin-bottom: 12px !important;
-        font-size: 1.2rem !important;
-        line-height: 1;
-        border-left: 4px solid #E84F3D; /* Deixei a bordinha um pouco mais fina */
-    }
-
-    .product-grid {
-        gap: 10px !important; /* Aproxima os cards dos produtos */
-    }
+@keyframes balanco {
+    0%, 100% { transform: rotate(0deg) scale(1); }
+    25%       { transform: rotate(-12deg) scale(1.05); }
+    75%       { transform: rotate(12deg) scale(1.05); }
 }

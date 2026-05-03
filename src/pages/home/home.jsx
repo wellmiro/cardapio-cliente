@@ -13,23 +13,26 @@ function Home() {
   const [rolou, setRolou] = useState(false);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
-  const [busca, setBusca] = useState(""); // Estado para a barra de pesquisa
+  const [busca, setBusca] = useState("");
+
+  const [estaAberto, setEstaAberto] = useState(true);
+  const [horarios, setHorarios] = useState({ abertura: "", fechamento: "" });
 
   const imagemPadrao = "https://placehold.co/300x300?text=Sem+Foto";
 
   const carregarDados = useCallback(async () => {
     if (!id) return;
-
     try {
       setLoading(true);
       setErro(null);
-
       const [resProdutos, resCategorias] = await Promise.all([
         api.get(`/cardapio_digital/${id}`),
         api.get(`/categorias_digital/${id}`)
       ]);
-
-      setProdutos(resProdutos.data || []);
+      const dadosProdutos = resProdutos.data;
+      setEstaAberto(dadosProdutos.esta_aberto);
+      setHorarios(dadosProdutos.configuracoes || {});
+      setProdutos(dadosProdutos.lista_produtos || []);
       setCategorias(resCategorias.data || []);
     } catch (err) {
       console.error("Erro ao carregar dados", err);
@@ -40,10 +43,7 @@ function Home() {
   }, [id]);
 
   useEffect(() => {
-    const monitorarScroll = () => {
-      if (window.scrollY > 50) setRolou(true);
-      else setRolou(false);
-    };
+    const monitorarScroll = () => setRolou(window.scrollY > 50);
     window.addEventListener("scroll", monitorarScroll);
     return () => window.removeEventListener("scroll", monitorarScroll);
   }, []);
@@ -57,9 +57,8 @@ function Home() {
     }
   }, [id, carregarDados]);
 
-  // Lógica de Filtro: Filtra produtos por nome ou descrição
-  const produtosFiltrados = produtos.filter(p => 
-    p.nome.toLowerCase().includes(busca.toLowerCase()) || 
+  const produtosFiltrados = produtos.filter(p =>
+    p.nome.toLowerCase().includes(busca.toLowerCase()) ||
     (p.descricao && p.descricao.toLowerCase().includes(busca.toLowerCase()))
   );
 
@@ -69,6 +68,8 @@ function Home() {
     acc[categoriaNome].push(produto);
     return acc;
   }, {});
+
+  const fmtHora = (h) => h ? h.substring(0, 5) : "";
 
   if (loading) {
     return (
@@ -83,25 +84,41 @@ function Home() {
     return (
       <div className="center-page">
         <h2 className="error-title">{erro}</h2>
-        <button onClick={carregarDados} className="btn-recarregar">
-          Tentar Novamente
-        </button>
+        <button onClick={carregarDados} className="btn-recarregar">Tentar Novamente</button>
+      </div>
+    );
+  }
+
+  // 🔒 Bloqueio total — substitui tudo quando fechado
+  if (!estaAberto) {
+    return (
+      <div className="fechado-page">
+        <div className="fechado-card">
+          <div className="fechado-lua">🌙</div>
+          <h1>Estamos fechados</h1>
+          <p className="fechado-msg">No momento não estamos recebendo pedidos.</p>
+          <div className="fechado-horario-destaque">
+            <span className="fechado-label">Voltamos às</span>
+            <span className="fechado-hora">{fmtHora(horarios.abertura)}</span>
+          </div>
+          <p className="fechado-rodape">
+            Funcionamos das <strong>{fmtHora(horarios.abertura)}</strong> às <strong>{fmtHora(horarios.fechamento)}</strong>
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
     <div>
-      <Navbar 
-        showMenu={true} 
-        valorBusca={busca} 
-        onPesquisar={(texto) => setBusca(texto)} 
+      <Navbar
+        showMenu={true}
+        valorBusca={busca}
+        onPesquisar={(texto) => setBusca(texto)}
       />
-      
       <div className={rolou ? "topo" : ""}>
         <CategoriaBarra dados={categorias} />
       </div>
-
       <div className="main-container">
         {Object.entries(produtosPorCategoria).length > 0 ? (
           Object.entries(produtosPorCategoria).map(([categoria, listaProdutos]) => (

@@ -6,28 +6,60 @@ body {
     width: 100vw;
 }
 
+/* 1. CARD PRINCIPAL (REGRAS GERAIS) */
 .produto-box {
-    width: 210px;
-    min-height: 360px;
+    width: 100%; /* No mobile ele ocupa a largura toda */
+    height: fit-content !important; 
+    min-height: auto !important;
     background-color: #ffffff;
     padding: 15px;
-    border-radius: 20px;
-    border: 1px solid #f0f0f0;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    align-items: center;
-    text-align: center;
-    cursor: pointer;
-    margin: 10px auto;
     position: relative;
-    box-shadow: 0px 6px 15px rgba(0, 0, 0, 0.05);
+    display: flex;
     transition: all 0.2s ease;
+    cursor: pointer;
+    border: none;
+    border-bottom: 1px solid #f2f2f2; /* Estilo lista mobile */
 }
 
-.produto-box:hover {
-    transform: translateY(-5px);
-    box-shadow: 0px 10px 20px rgba(0, 0, 0, 0.1);
+/* 2. COMPORTAMENTO EXCLUSIVO PARA DESKTOP */
+@media (min-width: 901px) {
+    .produto-box {
+        width: 210px;
+        flex-direction: column; /* No PC volta a ser card vertical */
+        align-items: center;    /* Centraliza o conteúdo */
+        text-align: center;
+        margin: 10px auto;
+        border: 1px solid #f0f0f0;
+        border-radius: 20px;
+        box-shadow: 0px 6px 15px rgba(0, 0, 0, 0.05);
+    }
+    
+    .produto-box:hover {
+        transform: translateY(-5px);
+        box-shadow: 0px 10px 20px rgba(0, 0, 0, 0.1);
+    }
+}
+
+/* 3. COMPORTAMENTO EXCLUSIVO PARA MOBILE */
+@media (max-width: 900px) {
+    .produto-box {
+        flex-direction: row; /* No mobile volta a ser lista horizontal */
+        align-items: center;
+        text-align: left;    /* Alinhado à esquerda conforme a imagem */
+        border-radius: 0;
+        margin: 0;
+    }
+    
+    .produto-info {
+        flex: 1;
+        padding-left: 10px; /* Dá espaço da imagem */
+    }
+}
+
+/* 4. MATA O ESPAÇO DA DESCRIÇÃO VAZIA (GLOBAL) */
+.prod-vitrine-descricao:empty {
+    display: none !important;
+    margin: 0 !important;
 }
 
 /* Badge de Quantidade no Card */

@@ -34,6 +34,8 @@ function calcularFrete(lat2, lon2) {
 
 function parsearLocalizacao(texto) {
     const t = texto.trim();
+    
+    // 1. Tenta o formato do Google Maps
     const googleRegex = /@(-?\d+\.\d+),(-?\d+\.\d+)|[?&](?:q|ll)=(-?\d+\.\d+),(-?\d+\.\d+)/;
     const gm = t.match(googleRegex);
     if (gm) {
@@ -42,19 +44,26 @@ function parsearLocalizacao(texto) {
         if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
     }
 
-    const coordRegex = /(-?\d{1,3}\.\d+)[,\s]+(-?\d{1,3}\.\d+)/;
+    // 2. Tenta coordenadas diretas (aceita ponto ou vírgula)
+    const coordRegex = /(-?\d{1,3}[.,]\d+)[,\s]+(-?\d{1,3}[.,]\d+)/;
     const cm = t.match(coordRegex);
     if (cm) {
-        const lat = parseFloat(cm[1]);
-        const lng = parseFloat(cm[2]);
+        const lat = parseFloat(cm[1].replace(',', '.'));
+        const lng = parseFloat(cm[2].replace(',', '.'));
         if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng };
     }
 
-    const appleRegex = /ll=(-?\d+\.\d+),(-?\d+\.\d+)/;
+    // 3. Tenta o formato Apple Maps (aceita ponto ou vírgula)
+    const appleRegex = /ll=(-?\d+[.,]\d+),(-?\d+[.,]\d+)/;
     const am = t.match(appleRegex);
-    if (am) return { lat: parseFloat(am[1]), lng: parseFloat(am[2]) };
+    if (am) {
+        return { 
+            lat: parseFloat(am[1].replace(',', '.')), 
+            lng: parseFloat(am[2].replace(',', '.')) 
+        };
+    }
 
-    return null;
+    return null; 
 }
 
 function MapRefresher({ center }) {
@@ -343,7 +352,7 @@ export default function Checkout() {
                                 <input
                                     value={cep}
                                     onChange={handleCep}
-                                    placeholder="00000-000"
+                                    placeholder="00000-000- Digite Cep de onde você mora"
                                     maxLength={8}
                                     className={cepStatus === "erro" ? "input-erro" : cepStatus === "ok" ? "input-ok" : ""}
                                 />
@@ -466,6 +475,7 @@ export default function Checkout() {
                             <p>{endereco}, {numero} {complemento && `- ${complemento}`}</p>
                             <p>{bairro} - {cidade}/{uf}</p>
                         </div>
+                        
 
                         <div className="revisao-secao">
                             <p className="revisao-titulo">🛍️ Itens</p>

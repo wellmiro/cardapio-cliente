@@ -16,20 +16,19 @@ import iconShadow from "leaflet/dist/images/marker-shadow.png";
 let DefaultIcon = L.icon({ iconUrl: icon, shadowUrl: iconShadow, iconSize: [25, 41], iconAnchor: [12, 41] });
 L.Marker.prototype.options.icon = DefaultIcon;
 
-// Configurações de Frete
-const ORIGEM = { lat: -23.899753126604352, lng: -47.51519888650903 };
-const TAXA_BASE = 5.00;
-const PRECO_POR_KM = 2.50;
-
-// Funções Utilitárias (Fora do Componente)
-function calcularFrete(lat2, lon2) {
-    const R = 6371;
-    const dLat = (lat2 - ORIGEM.lat) * Math.PI / 180;
-    const dLon = (lon2 - ORIGEM.lng) * Math.PI / 180;
+// =========================================================================
+// Funções Utilitárias (Fora do Componente - OK)
+// =========================================================================
+function calcularFrete(lat2, lon2, latOrigem, lngOrigem, vTaxaBase, vPrecoKm) {
+    const R = 6371; // Raio da Terra em KM
+    const dLat = (lat2 - latOrigem) * Math.PI / 180;
+    const dLon = (lon2 - lngOrigem) * Math.PI / 180;
     const a = Math.sin(dLat / 2) ** 2 +
-        Math.cos(ORIGEM.lat * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+        Math.cos(latOrigem * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
     const km = Math.ceil(2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * R);
-    return TAXA_BASE + km * PRECO_POR_KM;
+    
+    // Agora a conta usa o que veio do seu banco de dados!
+    return vTaxaBase + (km * vPrecoKm);
 }
 
 function parsearLocalizacao(texto) {
@@ -92,10 +91,18 @@ function ModalSucesso({ onClose }) {
 
 const fmt = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
+// =========================================================================
+// COMPONENTE PRINCIPAL
+// =========================================================================
 export default function Checkout() {
-    // Hooks chamados corretamente dentro do componente
+    // Hooks do Contexto e Navegação
     const { cartItems, totalCart, setCartItems, setTotalCart } = useContext(CartContext);
     const navigate = useNavigate();
+
+    // ESTADOS DINÂMICOS DO ESTABELECIMENTO (Movidos para dentro do componente!)
+    const [origem, setOrigem] = useState({ lat: -23.8204002, lng: -47.7118912 }); 
+    const [precoPorKm, setPrecoPorKm] = useState(1.00); 
+    const [taxaBase, setTaxaBase] = useState(5.00);
 
     // Estados de Controle de UI
     const [msgAlert, setMsgAlert] = useState("");
@@ -110,9 +117,9 @@ export default function Checkout() {
     const [fone, setFone] = useState("");
 
     // Step 2 — Localização e Endereço
-    const [posicao, setPosicao] = useState([ORIGEM.lat, ORIGEM.lng]);
+    const [posicao, setPosicao] = useState([-23.8204002, -47.7118912]); // Inicializado com Pilar do Sul seguro
     const [coordenadasConfirmadas, setCoordenadasConfirmadas] = useState(false);
-    const [frete, setFrete] = useState(0);
+    const [frete, setFrete] = useState(0); // Voltou a ser um estado estável
     const [cep, setCep] = useState("");
     const [cepStatus, setCepStatus] = useState(""); 
     const [locInput, setLocInput] = useState("");
@@ -131,6 +138,39 @@ export default function Checkout() {
     const [tipoCartao, setTipoCartao] = useState("");
     const [dinheiro, setDinheiro] = useState("");
 
+    // EFFECT PARA CARREGAR CONFIGURAÇÕES (Movido para dentro do componente!)
+    useEffect(() => {
+        async function carregarConfiguracoesRestaurante() {
+            const slugAtual = localStorage.getItem("slug");
+            if (!slugAtual) return;
+
+            try {
+                const res = await api.get(`/cardapio_digital/${slugAtual}`);
+                const dados = res.data;
+
+                if (dados.configuracoes) {
+                    if (dados.configuracoes.latitude && dados.configuracoes.longitude) {
+                        const latLng = {
+                            lat: parseFloat(dados.configuracoes.latitude),
+                            lng: parseFloat(dados.configuracoes.longitude)
+                        };
+                        setOrigem(latLng);
+                        setPosicao([latLng.lat, latLng.lng]); // Ajusta o mapa para o centro da cidade do restaurante
+                    }
+                    if (dados.configuracoes.preco_km) {
+                        setPrecoPorKm(parseFloat(dados.configuracoes.preco_km));
+                    }
+                    if (dados.configuracoes.taxa_base) {
+                        setTaxaBase(parseFloat(dados.configuracoes.taxa_base));
+                    }
+                }
+            } catch (err) {
+                console.error("Erro ao carregar configurações dinâmicas de frete", err);
+            }
+        }
+        carregarConfiguracoesRestaurante();
+    }, []);
+
     const alerta = (msg, tipo = "erro") => { 
         setMsgAlert(msg); 
         setTipoAlert(tipo); 
@@ -140,7 +180,9 @@ export default function Checkout() {
     async function aplicarCoordenadas(lat, lng) {
         setPosicao([lat, lng]);
         setCoordenadasConfirmadas(true);
-        setFrete(calcularFrete(lat, lng));
+        
+        // Passando todas as variáveis necessárias para a conta fechar certo com o BD:
+        setFrete(calcularFrete(lat, lng, origem.lat, origem.lng, taxaBase, precoPorKm));
 
         try {
             const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
@@ -215,6 +257,7 @@ export default function Checkout() {
         return true;
     }
 
+    // ... (restante das validações e do retorno visual permanece idêntico e correto) ...
     function validarStep2() {
         if (!coordenadasConfirmadas) {
             alerta("Confirme sua localização pelo mapa, CEP ou colando o link.");
@@ -474,8 +517,7 @@ export default function Checkout() {
                             <p><strong>{nome}</strong> — {fone}</p>
                             <p>{endereco}, {numero} {complemento && `- ${complemento}`}</p>
                             <p>{bairro} - {cidade}/{uf}</p>
-                        </div>
-                        
+                        </div>                    
 
                         <div className="revisao-secao">
                             <p className="revisao-titulo">🛍️ Itens</p>
@@ -497,7 +539,7 @@ export default function Checkout() {
 
                         <div className="footer-buttons">
                             <button className="btn-back" onClick={navigateBack} disabled={enviando}>← Voltar</button>
-                            <button className={`btn-checkout ${enviando ? "enviando" : ""}`} onClick={finalizarPedido} disabled={enviando}>
+                            <button className="btn-checkout ${enviando ? 'enviando' : ''}" onClick={finalizarPedido} disabled={enviando}>
                                 {enviando ? "Enviando..." : "🚀 Finalizar Pedido"}
                             </button>
                         </div>

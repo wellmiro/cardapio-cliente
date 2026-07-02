@@ -139,37 +139,43 @@ export default function Checkout() {
     const [dinheiro, setDinheiro] = useState("");
 
     // EFFECT PARA CARREGAR CONFIGURAÇÕES (Movido para dentro do componente!)
-    useEffect(() => {
-        async function carregarConfiguracoesRestaurante() {
-            const slugAtual = localStorage.getItem("slug");
-            if (!slugAtual) return;
+ // EFFECT PARA CARREGAR CONFIGURAÇÕES
+useEffect(() => {
+    async function carregarConfiguracoesRestaurante() {
+        const slugAtual = localStorage.getItem("slug");
+        if (!slugAtual) return;
 
-            try {
-                const res = await api.get(`/cardapio_digital/${slugAtual}`);
-                const dados = res.data;
+        try {
+            const res = await api.get(`/cardapio_digital/${slugAtual}`);
+            const dados = res.data;
 
-                if (dados.configuracoes) {
-                    if (dados.configuracoes.latitude && dados.configuracoes.longitude) {
-                        const latLng = {
-                            lat: parseFloat(dados.configuracoes.latitude),
-                            lng: parseFloat(dados.configuracoes.longitude)
-                        };
-                        setOrigem(latLng);
-                        setPosicao([latLng.lat, latLng.lng]); // Ajusta o mapa para o centro da cidade do restaurante
-                    }
-                    if (dados.configuracoes.preco_km) {
-                        setPrecoPorKm(parseFloat(dados.configuracoes.preco_km));
-                    }
-                    if (dados.configuracoes.taxa_base) {
-                        setTaxaBase(parseFloat(dados.configuracoes.taxa_base));
-                    }
-                }
-            } catch (err) {
-                console.error("Erro ao carregar configurações dinâmicas de frete", err);
+            // Busca de forma inteligente onde os dados estão escondidos no retorno da API
+            const fonteDados = dados.configuracoes || dados.estabelecimento || dados;
+
+            if (fonteDados && fonteDados.latitude && fonteDados.longitude) {
+                const latLng = {
+                    lat: parseFloat(fonteDados.latitude),
+                    lng: parseFloat(fonteDados.longitude)
+                };
+                
+                setOrigem(latLng);
+                setPosicao([latLng.lat, latLng.lng]); // Isso vai mover o mapa para Tapiraí!
             }
+
+            if (fonteDados && fonteDados.preco_km) {
+                setPrecoPorKm(parseFloat(fonteDados.preco_km));
+            }
+            
+            if (fonteDados && fonteDados.taxa_base) {
+                setTaxaBase(parseFloat(fonteDados.taxa_base));
+            }
+
+        } catch (err) {
+            console.error("Erro ao carregar configurações dinâmicas de frete", err);
         }
-        carregarConfiguracoesRestaurante();
-    }, []);
+    }
+    carregarConfiguracoesRestaurante();
+}, []);
 
     const alerta = (msg, tipo = "erro") => { 
         setMsgAlert(msg); 

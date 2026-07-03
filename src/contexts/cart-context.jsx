@@ -3,19 +3,34 @@ import { createContext, useState, useEffect } from "react";
 const CartContext = createContext();
 
 function CartProvider(props) {
-    const [showCart, setShowCart] = useState(false); // NOVO: Controle de visibilidade
+    const [showCart, setShowCart] = useState(false);
+
+    // Pegamos o estabelecimento atual para criar uma chave única no localStorage
+    const getCartKey = () => {
+        const slugAtual = localStorage.getItem("slug") || "default";
+        return `99burger:cart_${slugAtual}`;
+    };
+
+    const getTimestampKey = () => {
+        const slugAtual = localStorage.getItem("slug") || "default";
+        return `99burger:cart_timestamp_${slugAtual}`;
+    };
 
     const [cartItems, setCartItems] = useState(() => {
-        const itensSalvos = localStorage.getItem("99burger:cart");
-        const dataSalva = localStorage.getItem("99burger:cart_timestamp");
+        // Agora busca a sacola específica deste estabelecimento
+        const cartKey = localStorage.getItem("slug") ? `99burger:cart_${localStorage.getItem("slug")}` : "99burger:cart_default";
+        const timeKey = localStorage.getItem("slug") ? `99burger:cart_timestamp_${localStorage.getItem("slug")}` : "99burger:cart_timestamp_default";
+        
+        const itensSalvos = localStorage.getItem(cartKey);
+        const dataSalva = localStorage.getItem(timeKey);
 
         if (itensSalvos && dataSalva) {
             const agora = new Date().getTime();
             const tresHoras = 3 * 60 * 60 * 1000;
 
             if (agora - parseInt(dataSalva) > tresHoras) {
-                localStorage.removeItem("99burger:cart");
-                localStorage.removeItem("99burger:cart_timestamp");
+                localStorage.removeItem(cartKey);
+                localStorage.removeItem(timeKey);
                 return [];
             }
             return JSON.parse(itensSalvos);
@@ -25,9 +40,24 @@ function CartProvider(props) {
 
     const [totalCart, setTotalCart] = useState(0);
 
+    // Efeito para recarregar o carrinho caso o usuário mude de página/estabelecimento
     useEffect(() => {
-        localStorage.setItem("99burger:cart", JSON.stringify(cartItems));
-        localStorage.setItem("99burger:cart_timestamp", new Date().getTime().toString());
+        const cartKey = getCartKey();
+        const itensSalvos = localStorage.getItem(cartKey);
+        if (itensSalvos) {
+            setCartItems(JSON.parse(itensSalvos));
+        } else {
+            setCartItems([]);
+        }
+    }, [window.location.pathname]); // Monitora a mudança de rota
+
+    useEffect(() => {
+        // Salva na chave única do estabelecimento atual
+        const cartKey = getCartKey();
+        const timeKey = getTimestampKey();
+        
+        localStorage.setItem(cartKey, JSON.stringify(cartItems));
+        localStorage.setItem(timeKey, new Date().getTime().toString());
         CalculoTotal(cartItems);
     }, [cartItems]);
 
@@ -47,7 +77,7 @@ function CartProvider(props) {
         }
 
         setCartItems(cartItemsNovo);
-        setShowCart(true); // Abre a sacola automaticamente ao adicionar
+        setShowCart(true); 
     }
 
     function RemoveItemCart(id, observacao) {
@@ -65,10 +95,13 @@ function CartProvider(props) {
     }
 
     function LimparCart() {
+        const cartKey = getCartKey();
+        const timeKey = getTimestampKey();
+        
         setCartItems([]);
         setTotalCart(0);
-        localStorage.removeItem("99burger:cart");
-        localStorage.removeItem("99burger:cart_timestamp");
+        localStorage.removeItem(cartKey);
+        localStorage.removeItem(timeKey);
     }
 
     function CalculoTotal(items) {
@@ -82,14 +115,14 @@ function CartProvider(props) {
     return (
         <CartContext.Provider value={{ 
             cartItems, 
-            setCartItems, // Adicionado para o Checkout poder limpar
+            setCartItems, 
             AddItemCart, 
             RemoveItemCart, 
             totalCart, 
-            setTotalCart, // Adicionado para o Checkout poder zerar
+            setTotalCart, 
             LimparCart,
-            showCart,    // NOVO
-            setShowCart  // NOVO
+            showCart,    
+            setShowCart  
         }}>
             {props.children}
         </CartContext.Provider>

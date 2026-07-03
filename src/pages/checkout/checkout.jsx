@@ -1,40 +1,28 @@
-import "./checkout.css";
-import Navbar from "../../components/navbar/navbar.jsx";
-import AlertModal from "../../components/alert-modal/AlertModal.jsx";
-import { useEffect, useState, useContext } from "react";
-import { CartContext } from "../../contexts/cart-context.jsx";
-import api from "../../services/api.js";
+import { useEffect, useState, useContext, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import Navbar from "../../components/navbar/navbar.jsx";
+import api from "../../services/api.js";
+import { CartContext } from "../../contexts/cart-context.jsx";
+import AlertModal from "../../components/alert-modal/AlertModal.jsx";
 
+// Importações do Leaflet
 import { MapContainer, TileLayer, Marker, useMap, LayersControl } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
 import icon from "leaflet/dist/images/marker-icon.png";
 import iconShadow from "leaflet/dist/images/marker-shadow.png";
+import "./checkout.css";
 
+// Configuração do ícone padrão do Leaflet
 let DefaultIcon = L.icon({ iconUrl: icon, shadowUrl: iconShadow, iconSize: [25, 41], iconAnchor: [12, 41] });
 L.Marker.prototype.options.icon = DefaultIcon;
 
-// =========================================================================
-// Funções Utilitárias (Fora do Componente - OK)
-// =========================================================================
-function calcularFrete(lat2, lon2, latOrigem, lngOrigem, vTaxaBase, vPrecoKm) {
-    const R = 6371; // Raio da Terra em KM
-    const dLat = (lat2 - latOrigem) * Math.PI / 180;
-    const dLon = (lon2 - lngOrigem) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 +
-        Math.cos(latOrigem * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
-    const km = Math.ceil(2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * R);
-    
-    // Agora a conta usa o que veio do seu banco de dados!
-    return vTaxaBase + (km * vPrecoKm);
-}
-
+/* ==========================================================
+   FUNÇÕES E COMPONENTES AUXILIARES
+   ========================================================== */
 function parsearLocalizacao(texto) {
     const t = texto.trim();
-    
-    // 1. Tenta o formato do Google Maps
     const googleRegex = /@(-?\d+\.\d+),(-?\d+\.\d+)|[?&](?:q|ll)=(-?\d+\.\d+),(-?\d+\.\d+)/;
     const gm = t.match(googleRegex);
     if (gm) {
@@ -43,7 +31,6 @@ function parsearLocalizacao(texto) {
         if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
     }
 
-    // 2. Tenta coordenadas diretas (aceita ponto ou vírgula)
     const coordRegex = /(-?\d{1,3}[.,]\d+)[,\s]+(-?\d{1,3}[.,]\d+)/;
     const cm = t.match(coordRegex);
     if (cm) {
@@ -52,23 +39,42 @@ function parsearLocalizacao(texto) {
         if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng };
     }
 
-    // 3. Tenta o formato Apple Maps (aceita ponto ou vírgula)
     const appleRegex = /ll=(-?\d+[.,]\d+),(-?\d+[.,]\d+)/;
     const am = t.match(appleRegex);
     if (am) {
-        return { 
-            lat: parseFloat(am[1].replace(',', '.')), 
-            lng: parseFloat(am[2].replace(',', '.')) 
+        return {
+            lat: parseFloat(am[1].replace(',', '.')),
+            lng: parseFloat(am[2].replace(',', '.'))
         };
     }
-
-    return null; 
+    return null;
 }
 
+// Converte string/number vindos do banco em float válido.
+// Trata vírgula decimal (ex: "-23,813") e diferencia "ausente" de "0".
+function parseCoord(valor) {
+    if (valor === null || valor === undefined || valor === "") return null;
+    const num = parseFloat(String(valor).replace(",", "."));
+    return isNaN(num) ? null : num;
+}
+
+// Converte o nome do estado por extenso pra sigla (UF)
+function estadoParaUf(addr) {
+    let estado = addr.state_code || "";
+    if (!estado && addr.state) {
+        const statesMap = { "São Paulo": "SP", "Rio de Janeiro": "RJ", "Minas Gerais": "MG", "Paraná": "PR" };
+        estado = statesMap[addr.state] || addr.state.substring(0, 2).toUpperCase();
+    }
+    return estado.toUpperCase();
+}
+
+// IMPORTANTE: protege contra center nulo, senão o Leaflet quebra
+// com "Cannot read properties of null (reading 'lat')"
 function MapRefresher({ center }) {
     const map = useMap();
     useEffect(() => {
-        map.setView(center, 15);
+        if (!center) return;
+        map.setView(center, 16);
         setTimeout(() => map.invalidateSize(), 300);
     }, [center, map]);
     return null;
@@ -91,18 +97,13 @@ function ModalSucesso({ onClose }) {
 
 const fmt = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-// =========================================================================
-// COMPONENTE PRINCIPAL
-// =========================================================================
-export default function Checkout() {
-    // Hooks do Contexto e Navegação
+
+/* ==========================================================
+   COMPONENTE PRINCIPAL CHECKOUT
+   ========================================================== */
+export function Checkout() {
     const { cartItems, totalCart, setCartItems, setTotalCart } = useContext(CartContext);
     const navigate = useNavigate();
-
-    // ESTADOS DINÂMICOS DO ESTABELECIMENTO (Movidos para dentro do componente!)
-    const [origem, setOrigem] = useState({ lat: -23.8204002, lng: -47.7118912 }); 
-    const [precoPorKm, setPrecoPorKm] = useState(1.00); 
-    const [taxaBase, setTaxaBase] = useState(5.00);
 
     // Estados de Controle de UI
     const [msgAlert, setMsgAlert] = useState("");
@@ -112,18 +113,34 @@ export default function Checkout() {
     const [enviando, setEnviando] = useState(false);
     const [step, setStep] = useState(1);
 
+    // Configurações vindas dinamicamente do Banco
+    const [configFrete, setConfigFrete] = useState({
+        latOrigem: null,
+        lngOrigem: null,
+        taxaBase: 5.00,
+        precoPorKm: 2.50
+    });
+    const [configCarregada, setConfigCarregada] = useState(false);
+
     // Step 1 - Dados Pessoais
     const [nome, setNome] = useState("");
     const [fone, setFone] = useState("");
 
     // Step 2 — Localização e Endereço
-    const [posicao, setPosicao] = useState([-23.8204002, -47.7118912]); // Inicializado com Pilar do Sul seguro
+    const [posicao, setPosicao] = useState(null); // null = sem localização ainda, mapa fica em branco até definir
     const [coordenadasConfirmadas, setCoordenadasConfirmadas] = useState(false);
-    const [frete, setFrete] = useState(0); // Voltou a ser um estado estável
+    const [frete, setFrete] = useState(0);
     const [cep, setCep] = useState("");
-    const [cepStatus, setCepStatus] = useState(""); 
+    const [cepStatus, setCepStatus] = useState("");
     const [locInput, setLocInput] = useState("");
     const [locStatus, setLocStatus] = useState("");
+
+    // NOVO — Busca de endereço estilo iFood (autocomplete)
+    const [enderecoBusca, setEnderecoBusca] = useState("");
+    const [sugestoesEndereco, setSugestoesEndereco] = useState([]);
+    const [buscandoSugestoes, setBuscandoSugestoes] = useState(false);
+    const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
+    const debounceRef = useRef(null);
 
     const [endereco, setEndereco] = useState("");
     const [numero, setNumero] = useState("");
@@ -138,57 +155,77 @@ export default function Checkout() {
     const [tipoCartao, setTipoCartao] = useState("");
     const [dinheiro, setDinheiro] = useState("");
 
-    // EFFECT PARA CARREGAR CONFIGURAÇÕES (Movido para dentro do componente!)
- // EFFECT PARA CARREGAR CONFIGURAÇÕES
-useEffect(() => {
-    async function carregarConfiguracoesRestaurante() {
-        const slugAtual = localStorage.getItem("slug");
-        if (!slugAtual) return;
+    // Buscar dados dinâmicos do estabelecimento ao montar a tela
+    useEffect(() => {
+        async function carregarConfiguracoesLoja() {
+            const slugAtual = localStorage.getItem("slug");
+            if (!slugAtual) { setConfigCarregada(true); return; }
+            try {
+                const res = await api.get(`/cardapio_digital/${slugAtual}`);
+                const dadosLoja = res.data;
 
-        try {
-            const res = await api.get(`/cardapio_digital/${slugAtual}`);
-            const dados = res.data;
+                if (dadosLoja) {
+                    // ATENÇÃO: latitude, longitude, taxa_base e preco_km vêm direto
+                    // na raiz do JSON (não dentro de "configuracoes", que só tem horário)
+                    const latOrigem = parseCoord(dadosLoja.latitude);
+                    const lngOrigem = parseCoord(dadosLoja.longitude);
 
-            // Busca de forma inteligente onde os dados estão escondidos no retorno da API
-            const fonteDados = dados.configuracoes || dados.estabelecimento || dados;
+                    if (latOrigem === null || lngOrigem === null) {
+                        console.warn(
+                            "⚠️ Latitude/Longitude não encontradas (ou inválidas) no retorno da API. Mapa ficará em branco até o cliente informar manualmente. Resposta recebida:",
+                            dadosLoja
+                        );
+                    }
 
-            if (fonteDados && fonteDados.latitude && fonteDados.longitude) {
-                const latLng = {
-                    lat: parseFloat(fonteDados.latitude),
-                    lng: parseFloat(fonteDados.longitude)
-                };
-                
-                setOrigem(latLng);
-                setPosicao([latLng.lat, latLng.lng]); // Isso vai mover o mapa para Tapiraí!
+                    const novasConfigs = {
+                        latOrigem,
+                        lngOrigem,
+                        taxaBase: parseCoord(dadosLoja.taxa_base) ?? 5.00,
+                        precoPorKm: parseCoord(dadosLoja.preco_km) ?? 2.50
+                    };
+
+                    setConfigFrete(novasConfigs);
+
+                    // Só posiciona o mapa se o banco realmente tiver lat/lng.
+                    if (latOrigem !== null && lngOrigem !== null) {
+                        setPosicao([latOrigem, lngOrigem]);
+                    }
+                }
+            } catch (err) {
+                console.error("Erro ao carregar configurações de entrega", err);
+            } finally {
+                setConfigCarregada(true);
             }
-
-            if (fonteDados && fonteDados.preco_km) {
-                setPrecoPorKm(parseFloat(fonteDados.preco_km));
-            }
-            
-            if (fonteDados && fonteDados.taxa_base) {
-                setTaxaBase(parseFloat(fonteDados.taxa_base));
-            }
-
-        } catch (err) {
-            console.error("Erro ao carregar configurações dinâmicas de frete", err);
         }
-    }
-    carregarConfiguracoesRestaurante();
-}, []);
+        carregarConfiguracoesLoja();
+    }, []);
 
-    const alerta = (msg, tipo = "erro") => { 
-        setMsgAlert(msg); 
-        setTipoAlert(tipo); 
-        setShowAlert(true); 
+    // Função de Cálculo usando os estados dinâmicos atualizados
+    function calcularFreteDinamico(lat2, lon2) {
+        // Sem coordenada de origem cadastrada no banco, não dá pra calcular por distância.
+        if (configFrete.latOrigem === null || configFrete.lngOrigem === null) {
+            console.warn("⚠️ Loja sem latitude/longitude cadastrada. Frete calculado só com taxa base, sem custo por km.");
+            return configFrete.taxaBase;
+        }
+        const R = 6371;
+        const dLat = (lat2 - configFrete.latOrigem) * Math.PI / 180;
+        const dLon = (lon2 - configFrete.lngOrigem) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(configFrete.latOrigem * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+        const km = Math.ceil(2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * R);
+        return configFrete.taxaBase + km * configFrete.precoPorKm;
+    }
+
+    const alerta = (msg, tipo = "erro") => {
+        setMsgAlert(msg);
+        setTipoAlert(tipo);
+        setShowAlert(true);
     };
 
     async function aplicarCoordenadas(lat, lng) {
         setPosicao([lat, lng]);
         setCoordenadasConfirmadas(true);
-        
-        // Passando todas as variáveis necessárias para a conta fechar certo com o BD:
-        setFrete(calcularFrete(lat, lng, origem.lat, origem.lng, taxaBase, precoPorKm));
+        setFrete(calcularFreteDinamico(lat, lng));
 
         try {
             const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
@@ -197,14 +234,7 @@ useEffect(() => {
                 if (!endereco) setEndereco(data.address.road || data.address.pedestrian || "");
                 if (!bairro) setBairro(data.address.suburb || data.address.neighbourhood || "");
                 if (!cidade) setCidade(data.address.city || data.address.town || data.address.village || "");
-                if (!uf) {
-                    let estado = data.address.state_code || "";
-                    if (!estado && data.address.state) {
-                        const statesMap = { "São Paulo": "SP", "Rio de Janeiro": "RJ", "Minas Gerais": "MG", "Paraná": "PR" };
-                        estado = statesMap[data.address.state] || data.address.state.substring(0, 2).toUpperCase();
-                    }
-                    setUf(estado.toUpperCase());
-                }
+                if (!uf) setUf(estadoParaUf(data.address));
             }
         } catch (e) { console.error("Erro reverse geocode", e); }
     }
@@ -256,14 +286,66 @@ useEffect(() => {
         }
     }
 
-    // Validações por Step
+    // NOVO — Busca as sugestões de endereço no Nominatim (mesmo serviço já usado no resto do arquivo)
+    async function buscarSugestoesEndereco(texto) {
+        if (!texto || texto.trim().length < 3) {
+            setSugestoesEndereco([]);
+            return;
+        }
+        setBuscandoSugestoes(true);
+        try {
+            const res = await fetch(
+                `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&countrycodes=br&limit=5&q=${encodeURIComponent(texto)}`
+            );
+            const data = await res.json();
+            setSugestoesEndereco(data || []);
+        } catch (e) {
+            console.error("Erro ao buscar sugestões de endereço", e);
+            setSugestoesEndereco([]);
+        } finally {
+            setBuscandoSugestoes(false);
+        }
+    }
+
+    // NOVO — Dispara a busca com debounce de 400ms (evita 1 requisição por tecla digitada)
+    function handleEnderecoBuscaChange(e) {
+        const v = e.target.value;
+        setEnderecoBusca(v);
+        setMostrarSugestoes(true);
+
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => buscarSugestoesEndereco(v), 400);
+    }
+
+    // NOVO — Quando o usuário clica numa sugestão da lista
+    async function selecionarSugestaoEndereco(sugestao) {
+        const lat = parseFloat(sugestao.lat);
+        const lng = parseFloat(sugestao.lon);
+        if (isNaN(lat) || isNaN(lng)) return;
+
+        const addr = sugestao.address || {};
+
+        setEnderecoBusca(sugestao.display_name || "");
+        setMostrarSugestoes(false);
+        setSugestoesEndereco([]);
+
+        // Preenche os campos de endereço com os dados da sugestão escolhida
+        setEndereco(addr.road || addr.pedestrian || "");
+        setBairro(addr.suburb || addr.neighbourhood || "");
+        setCidade(addr.city || addr.town || addr.village || "");
+        setUf(estadoParaUf(addr));
+
+        // Centraliza o mapa e recalcula o frete — reaproveita a mesma função
+        // usada pelo CEP, pelo link colado e pelo arrastar do marcador
+        await aplicarCoordenadas(lat, lng);
+    }
+
     function validarStep1() {
         if (!nome.trim()) { alerta("Por favor, informe seu nome."); return false; }
         if (!fone.trim()) { alerta("Por favor, informe seu WhatsApp."); return false; }
         return true;
     }
 
-    // ... (restante das validações e do retorno visual permanece idêntico e correto) ...
     function validarStep2() {
         if (!coordenadasConfirmadas) {
             alerta("Confirme sua localização pelo mapa, CEP ou colando o link.");
@@ -315,7 +397,7 @@ useEffect(() => {
                 vl_entrega: frete,
                 vl_total: totalCart + frete,
                 endereco_entrega: enderecoCompleto + (referencia ? ` | Ref: ${referencia}` : ""),
-                rota: `https://www.google.com/maps?q=${posicao[0]},${posicao[1]}`,
+                rota: posicao ? `https://www.google.com/maps?q=${posicao[0]},${posicao[1]}` : "",
                 forma_pagamento,
                 dinheiro: pagamento === "dinheiro" ? Number(dinheiro) : 0,
                 troco: pagamento === "dinheiro" ? Number(dinheiro) - (totalCart + frete) : 0,
@@ -389,8 +471,41 @@ useEffect(() => {
                     <div className="box-checkout">
                         <h3 className="box-title">📍 Onde entregamos?</h3>
 
+                        {/* NOVO — Opção 1: Busca de endereço estilo iFood, sempre a primeira da lista */}
                         <div className="loc-opcao">
-                            <div className="loc-opcao-titulo">Opção 1 — CEP</div>
+                            <div className="loc-opcao-titulo">Opção 1 — Digite seu Endereço</div>
+                            <div className="input-group" style={{ position: "relative" }}>
+                                <label>
+                                    Endereço
+                                    {buscandoSugestoes && <span className="tag-info">buscando...</span>}
+                                </label>
+                                <input
+                                    value={enderecoBusca}
+                                    onChange={handleEnderecoBuscaChange}
+                                    onFocus={() => { if (sugestoesEndereco.length > 0) setMostrarSugestoes(true); }}
+                                    onBlur={() => setTimeout(() => setMostrarSugestoes(false), 150)}
+                                    placeholder="Digite o nome da rua..."
+                                    autoComplete="off"
+                                />
+
+                                {mostrarSugestoes && sugestoesEndereco.length > 0 && (
+                                    <ul className="sugestoes-lista">
+                                        {sugestoesEndereco.map((s, i) => (
+                                            <li
+                                                key={i}
+                                                className="sugestao-item"
+                                                onMouseDown={() => selecionarSugestaoEndereco(s)}
+                                            >
+                                                📍 {s.display_name}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="loc-opcao">
+                            <div className="loc-opcao-titulo">Opção 2 — CEP</div>
                             <div className="input-group">
                                 <label>
                                     CEP
@@ -401,7 +516,7 @@ useEffect(() => {
                                 <input
                                     value={cep}
                                     onChange={handleCep}
-                                    placeholder="00000-000- Digite Cep de onde você mora"
+                                    placeholder="00000-000 - Digite o CEP"
                                     maxLength={8}
                                     className={cepStatus === "erro" ? "input-erro" : cepStatus === "ok" ? "input-ok" : ""}
                                 />
@@ -410,7 +525,7 @@ useEffect(() => {
                         </div>
 
                         <div className="loc-opcao">
-                            <div className="loc-opcao-titulo">Opção 2 — Colar localização</div>
+                            <div className="loc-opcao-titulo">Opção 3 — Colar localização</div>
                             <div className="input-group">
                                 <label>
                                     Link ou coordenadas
@@ -427,29 +542,52 @@ useEffect(() => {
                         </div>
 
                         <div className="loc-opcao">
-                            <div className="loc-opcao-titulo">Opção 3 — Arraste o mapa</div>
-                            <div className="mapa-container">
-                                <MapContainer center={posicao} zoom={15} style={{ height: "100%", width: "100%" }}>
-                                    <LayersControl position="topright">
-                                        <LayersControl.BaseLayer checked name="Ruas">
-                                            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OpenStreetMap" />
-                                        </LayersControl.BaseLayer>
-                                        <LayersControl.BaseLayer name="Satélite">
-                                            <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" attribution="© Esri" />
-                                        </LayersControl.BaseLayer>
-                                    </LayersControl>
-                                    <Marker
-                                        position={posicao}
-                                        draggable={true}
-                                        eventHandlers={{
-                                            dragend: async (e) => {
-                                                const { lat, lng } = e.target.getLatLng();
-                                                await aplicarCoordenadas(lat, lng);
-                                            }
-                                        }}
-                                    />
-                                    <MapRefresher center={posicao} />
-                                </MapContainer>
+                            <div className="loc-opcao-titulo">Opção 4 — Arraste o mapa</div>
+                            <div className="mapa-container" style={{ position: "relative" }}>
+                                {!configCarregada ? (
+                                    <div className="mapa-carregando">Carregando mapa...</div>
+                                ) : (
+                                    <>
+                                        <MapContainer
+                                            center={posicao || [0, 0]}
+                                            zoom={posicao ? 16 : 2}
+                                            style={{ height: "100%", width: "100%" }}
+                                        >
+                                            <LayersControl position="topright">
+                                                <LayersControl.BaseLayer checked name="Ruas">
+                                                    <TileLayer
+                                                        url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+                                                        attribution='© OpenStreetMap'
+                                                    />
+                                                </LayersControl.BaseLayer>
+                                                <LayersControl.BaseLayer name="Satélite">
+                                                    <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" attribution="© Esri" />
+                                                </LayersControl.BaseLayer>
+                                            </LayersControl>
+
+                                            {posicao && (
+                                                <Marker
+                                                    position={posicao}
+                                                    draggable={true}
+                                                    eventHandlers={{
+                                                        dragend: async (e) => {
+                                                            const { lat, lng } = e.target.getLatLng();
+                                                            await aplicarCoordenadas(lat, lng);
+                                                        }
+                                                    }}
+                                                />
+                                            )}
+
+                                            <MapRefresher center={posicao} />
+                                        </MapContainer>
+
+                                        {!posicao && (
+                                            <div className="mapa-overlay-vazio">
+                                                📍 Informe seu CEP ou cole o link da sua localização acima para o mapa aparecer.
+                                            </div>
+                                        )}
+                                    </>
+                                )}
                             </div>
                         </div>
 
@@ -467,6 +605,11 @@ useEffect(() => {
                                 <label>Nº <span className="obrig">*</span></label>
                                 <input value={numero} onChange={e => setNumero(e.target.value)} placeholder="123" />
                             </div>
+                        </div>
+
+                        <div className="input-group espacamento-top">
+                            <label>Complemento</label>
+                            <input value={complemento} onChange={e => setComplemento(e.target.value)} placeholder="Apto, bloco, casa dos fundos..." />
                         </div>
 
                         <div className="input-group espacamento-top">
@@ -523,7 +666,7 @@ useEffect(() => {
                             <p><strong>{nome}</strong> — {fone}</p>
                             <p>{endereco}, {numero} {complemento && `- ${complemento}`}</p>
                             <p>{bairro} - {cidade}/{uf}</p>
-                        </div>                    
+                        </div>
 
                         <div className="revisao-secao">
                             <p className="revisao-titulo">🛍️ Itens</p>
@@ -545,7 +688,7 @@ useEffect(() => {
 
                         <div className="footer-buttons">
                             <button className="btn-back" onClick={navigateBack} disabled={enviando}>← Voltar</button>
-                            <button className="btn-checkout ${enviando ? 'enviando' : ''}" onClick={finalizarPedido} disabled={enviando}>
+                            <button className={`btn-checkout ${enviando ? "enviando" : ""}`} onClick={finalizarPedido} disabled={enviando}>
                                 {enviando ? "Enviando..." : "🚀 Finalizar Pedido"}
                             </button>
                         </div>
@@ -555,3 +698,5 @@ useEffect(() => {
         </div>
     );
 }
+
+export default Checkout;

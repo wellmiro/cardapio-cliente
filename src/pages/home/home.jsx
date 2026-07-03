@@ -89,7 +89,6 @@ function Home() {
     );
   }
 
-  // 🔒 Bloqueio total — substitui tudo quando fechado
   if (!estaAberto) {
     return (
       <div className="fechado-page">

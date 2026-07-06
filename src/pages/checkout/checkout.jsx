@@ -122,6 +122,13 @@ export function Checkout() {
     });
     const [configCarregada, setConfigCarregada] = useState(false);
 
+    // NOVO — id do usuário/operador do estabelecimento, usado pra saber
+    // pra quem mandar a notificação de novo pedido no sistema (Delphi).
+    // Assumindo que vem junto no mesmo retorno de /cardapio_digital/:slug.
+    // Se o campo tiver outro nome no back, é só ajustar aqui.
+
+    const [idEstabelecimento, setIdEstabelecimento] = useState(null);
+
     // Step 1 - Dados Pessoais
     const [nome, setNome] = useState("");
     const [fone, setFone] = useState("");
@@ -156,49 +163,46 @@ export function Checkout() {
     const [dinheiro, setDinheiro] = useState("");
 
     // Buscar dados dinâmicos do estabelecimento ao montar a tela
-    useEffect(() => {
-        async function carregarConfiguracoesLoja() {
+ useEffect(() => {
+    async function carregarConfiguracoesLoja() {
+        try {
             const slugAtual = localStorage.getItem("slug");
-            if (!slugAtual) { setConfigCarregada(true); return; }
-            try {
-                const res = await api.get(`/cardapio_digital/${slugAtual}`);
-                const dadosLoja = res.data;
 
-                if (dadosLoja) {
-                    // ATENÇÃO: latitude, longitude, taxa_base e preco_km vêm direto
-                    // na raiz do JSON (não dentro de "configuracoes", que só tem horário)
-                    const latOrigem = parseCoord(dadosLoja.latitude);
-                    const lngOrigem = parseCoord(dadosLoja.longitude);
-
-                    if (latOrigem === null || lngOrigem === null) {
-                        console.warn(
-                            "⚠️ Latitude/Longitude não encontradas (ou inválidas) no retorno da API. Mapa ficará em branco até o cliente informar manualmente. Resposta recebida:",
-                            dadosLoja
-                        );
-                    }
-
-                    const novasConfigs = {
-                        latOrigem,
-                        lngOrigem,
-                        taxaBase: parseCoord(dadosLoja.taxa_base) ?? 5.00,
-                        precoPorKm: parseCoord(dadosLoja.preco_km) ?? 2.50
-                    };
-
-                    setConfigFrete(novasConfigs);
-
-                    // Só posiciona o mapa se o banco realmente tiver lat/lng.
-                    if (latOrigem !== null && lngOrigem !== null) {
-                        setPosicao([latOrigem, lngOrigem]);
-                    }
-                }
-            } catch (err) {
-                console.error("Erro ao carregar configurações de entrega", err);
-            } finally {
+            if (!slugAtual) {
                 setConfigCarregada(true);
+                return;
             }
+
+            const estabelecimento = await api.get(`/estabelecimentos/${slugAtual}`);
+            setIdEstabelecimento(estabelecimento.data.id_estabelecimento);
+
+            const res = await api.get(`/cardapio_digital/${slugAtual}`);
+            const dadosLoja = res.data;
+
+            if (dadosLoja) {
+                const latOrigem = parseCoord(dadosLoja.latitude);
+                const lngOrigem = parseCoord(dadosLoja.longitude);
+
+                setConfigFrete({
+                    latOrigem,
+                    lngOrigem,
+                    taxaBase: parseCoord(dadosLoja.taxa_base) ?? 5.0,
+                    precoPorKm: parseCoord(dadosLoja.preco_km) ?? 2.5
+                });
+
+                if (latOrigem !== null && lngOrigem !== null) {
+                    setPosicao([latOrigem, lngOrigem]);
+                }
+            }
+        } catch (err) {
+            console.error("Erro ao carregar configurações de entrega", err);
+        } finally {
+            setConfigCarregada(true);
         }
-        carregarConfiguracoesLoja();
-    }, []);
+    }
+
+    carregarConfiguracoesLoja();
+}, []);
 
     // Função de Cálculo usando os estados dinâmicos atualizados
     function calcularFreteDinamico(lat2, lon2) {
@@ -375,6 +379,52 @@ export function Checkout() {
 
     const navigateBack = () => setStep(s => Math.max(s - 1, 1));
 
+    // NOVO — Monta a mensagem completa (endereço, itens, pagamento, total)
+    // e faz o POST em /notificacoes, pra avisar o sistema que tem pedido novo.
+    // É chamada só depois que o pedido já foi criado com sucesso.
+async function enviarNotificacaoNovoPedido(enderecoCompleto, idPedido) {
+    try {
+
+        let formaPagamentoTexto = "PIX";
+
+        if (pagamento === "cartao") {
+            formaPagamentoTexto = `Cartão (${tipoCartao === "credito" ? "Crédito" : "Débito"})`;
+        } 
+        else if (pagamento === "dinheiro") {
+            formaPagamentoTexto = "Dinheiro";
+        }
+
+        const mensagem =
+            `Pedido #${idPedido} - ` +
+            `${nome} - ` +
+            `${fmt(totalCart + frete)} - ` +
+            `${formaPagamentoTexto} - ` +
+            `${enderecoCompleto}`;
+
+
+        const payload = {
+            id_estabelecimento: idEstabelecimento,
+            mensagem: mensagem,
+            id_pedido: idPedido,
+            id_produto: null
+        };
+
+
+        console.log("=== ENVIANDO NOTIFICAÇÃO ===");
+        console.log(payload);
+
+
+        await api.post("/notificacoes/publico", payload);
+
+
+    } catch (err) {
+
+        console.error("=== ERRO AO ENVIAR NOTIFICAÇÃO ===");
+        console.error(err.response?.data || err);
+
+    }
+}
+
     async function finalizarPedido() {
         const slugAtual = localStorage.getItem("slug");
         const session_id = localStorage.getItem("session_id") || crypto.randomUUID();
@@ -412,7 +462,13 @@ export function Checkout() {
                 }))
             };
 
-            await api.post("/pedidos/publico", payload);
+const respostaPedido = await api.post("/pedidos/publico", payload);
+
+await enviarNotificacaoNovoPedido(
+    enderecoCompleto,
+    respostaPedido.data.id_pedido
+);
+
             setCartItems([]);
             setTotalCart(0);
             setShowSucesso(true);

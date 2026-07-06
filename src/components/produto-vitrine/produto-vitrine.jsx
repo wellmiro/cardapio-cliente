@@ -1,3 +1,4 @@
+
 import { useState, useContext, useEffect } from "react";
 import { CartContext } from "../../contexts/cart-context";
 import "./produto-vitrine.css";
@@ -78,24 +79,33 @@ function ProdutoVitrine(props) {
             obsFinal = obsFinal ? `${obsFinal} (${textoOpcionais})` : textoOpcionais;
         }
 
-        AddItemCart({
-            id: props.id_produto,
-            nome: props.nome,
-            preco: props.preco + totalAdicionais, // Valor unitário com adicionais
-            foto: fotoProduto,
-            qtd: qtd,
-            observacao: obsFinal, // Vai para pedido_item.observacao
-            adicionais: todos.filter(i => i.qtd_item > 0).map(i => ({
-                ...i, 
-                nome_formatado: i.qtd_item > 1 ? `${i.qtd_item}x ${i.nome_item}` : i.nome_item
-            }))
-        });
+        const novoProduto = {
+    id: props.id_produto,
+    nome: props.nome,
+    preco: props.preco + totalAdicionais,
+    foto: fotoProduto,
+    qtd: qtd,
+    observacao: obsFinal,
+    adicionais: todos.filter(i => i.qtd_item > 0).map(i => ({
+        ...i,
+        nome_formatado: i.qtd_item > 1 ? `${i.qtd_item}x ${i.nome_item}` : i.nome_item
+    }))
+};
 
-        setAberto(false); setQtd(1); setObs(""); setSelecionados({});
-        if (setShowCart) setShowCart(true);
-    };
+AddItemCart(novoProduto);
 
-    return (
+setQtd(1);
+setObs("");
+setSelecionados({});
+setAberto(false);
+
+setTimeout(() => {
+    setShowCart(true);
+}, 300);
+
+}; // fecha handleAdicionarModal
+
+return (
         <>
             <div className="produto-box" onClick={() => setAberto(true)}>
                 {qtdExibir > 0 && <div className="badge-qtd">{qtdExibir}</div>}

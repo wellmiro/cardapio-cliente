@@ -227,21 +227,27 @@ export function Checkout() {
     };
 
     async function aplicarCoordenadas(lat, lng) {
-        setPosicao([lat, lng]);
-        setCoordenadasConfirmadas(true);
-        setFrete(calcularFreteDinamico(lat, lng));
+    setPosicao([lat, lng]);
+    setCoordenadasConfirmadas(true);
 
-        try {
-            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
-            const data = await res.json();
-            if (data.address) {
-                if (!endereco) setEndereco(data.address.road || data.address.pedestrian || "");
-                if (!bairro) setBairro(data.address.suburb || data.address.neighbourhood || "");
-                if (!cidade) setCidade(data.address.city || data.address.town || data.address.village || "");
-                if (!uf) setUf(estadoParaUf(data.address));
-            }
-        } catch (e) { console.error("Erro reverse geocode", e); }
+    const novoFrete = calcularFreteDinamico(lat, lng);
+    setFrete(novoFrete);
+
+    try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
+        const data = await res.json();
+
+        if (data.address) {
+            setEndereco(data.address.road || data.address.pedestrian || "");
+            setBairro(data.address.suburb || data.address.neighbourhood || "");
+            setCidade(data.address.city || data.address.town || data.address.village || "");
+            setUf(estadoParaUf(data.address));
+        }
+
+    } catch (e) {
+        console.error("Erro reverse geocode", e);
     }
+}
 
     async function handleCep(e) {
         const v = e.target.value.replace(/\D/g, "");

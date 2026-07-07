@@ -81,10 +81,12 @@ function ProdutoVitrine(props) {
 
         const novoProduto = {
     id: props.id_produto,
+    id_produto: props.id_produto,
     nome: props.nome,
-    preco: props.preco + totalAdicionais,
+    preco: Number(props.preco) + Number(totalAdicionais),
+    valor: Number(props.preco) + Number(totalAdicionais),
     foto: fotoProduto,
-    qtd: qtd,
+    qtd: Number(qtd),
     observacao: obsFinal,
     adicionais: todos.filter(i => i.qtd_item > 0).map(i => ({
         ...i,

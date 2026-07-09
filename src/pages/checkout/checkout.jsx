@@ -201,8 +201,12 @@ export function Checkout() {
                     return;
                 }
 
-                const res = await api.get(`/cardapio_digital/${slugAtual}`);
-                const dadosLoja = res.data || {};
+const res = await api.get(`/estabelecimentos/${slugAtual}`);
+const dadosLoja = res.data || {};
+
+console.log("ESTABELECIMENTO:", dadosLoja);
+
+setIdEstabelecimento(dadosLoja.id_estabelecimento);
 
                 const latOrigem = parseCoord(dadosLoja.latitude);
                 const lngOrigem = parseCoord(dadosLoja.longitude);
@@ -539,38 +543,47 @@ export function Checkout() {
         setStep(s => Math.max(s - 1, 1));
     };
 
-    async function enviarNotificacaoNovoPedido(enderecoCompleto, idPedido) {
-        try {
-            let formaPagamentoTexto = "PIX";
+ async function enviarNotificacaoNovoPedido(enderecoCompleto, idPedido) {
+    try {
+        let formaPagamentoTexto = "PIX";
 
-            if (pagamento === "cartao") {
-                formaPagamentoTexto = `Cartão (${tipoCartao === "credito" ? "Crédito" : "Débito"})`;
-            } else if (pagamento === "dinheiro") {
-                formaPagamentoTexto = "Dinheiro";
-            }
-
-            const nomeFormatado = formatarNomeProprio(nome);
-
-            const mensagem =
-                `Pedido #${idPedido} - ` +
-                `${nomeFormatado} - ` +
-                `${fmt(totalCart + frete)} - ` +
-                `${formaPagamentoTexto} - ` +
-                `${enderecoCompleto}`;
-
-            const payload = {
-                id_estabelecimento: idEstabelecimento,
-                mensagem,
-                id_pedido: idPedido,
-                id_produto: null
-            };
-
-            await api.post("/notificacoes/publico", payload);
-        } catch (err) {
-            console.error("=== ERRO AO ENVIAR NOTIFICAÇÃO ===");
-            console.error(err.response?.data || err);
+        if (pagamento === "cartao") {
+            formaPagamentoTexto = `Cartão (${tipoCartao === "credito" ? "Crédito" : "Débito"})`;
+        } else if (pagamento === "dinheiro") {
+            formaPagamentoTexto = "Dinheiro";
         }
+
+        const nomeFormatado = formatarNomeProprio(nome);
+
+        const itensResumo = cartItems
+            .map(item => {
+                const qtd = Number(item.qtd ?? 1);
+                return `${qtd}x ${item.nome}`;
+            })
+            .join(", ");
+
+        const mensagem =
+            `🛎️ NOVO PEDIDO #${idPedido}\n\n` +
+            `👤 Cliente: ${nomeFormatado}\n` +
+            `📱 WhatsApp: ${fone}\n\n` +
+            `🍔 Itens:\n${itensResumo}\n\n` +
+            `💰 Total: ${fmt(totalCart + frete)}\n` +
+            `💳 Pagamento: ${formaPagamentoTexto}\n\n` +
+            `📍 Endereço:\n${enderecoCompleto}`;
+
+        const payload = {
+            id_estabelecimento: idEstabelecimento,
+            mensagem,
+            id_pedido: idPedido,
+            id_produto: null
+        };
+
+        await api.post("/notificacoes/publico", payload);
+    } catch (err) {
+        console.error("=== ERRO AO ENVIAR NOTIFICAÇÃO ===");
+        console.error(err.response?.data || err);
     }
+}
 
     async function finalizarPedido() {
         if (!cartItems || cartItems.length === 0 || totalCart <= 0) {

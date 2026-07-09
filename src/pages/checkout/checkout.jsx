@@ -206,7 +206,7 @@ const dadosLoja = res.data || {};
 
 console.log("ESTABELECIMENTO:", dadosLoja);
 
-setIdEstabelecimento(dadosLoja.id_estabelecimento);
+setIdEstabelecimento(dadosLoja.id_estabelecimento || null);
 
                 const latOrigem = parseCoord(dadosLoja.latitude);
                 const lngOrigem = parseCoord(dadosLoja.longitude);
@@ -548,7 +548,7 @@ setIdEstabelecimento(dadosLoja.id_estabelecimento);
         let formaPagamentoTexto = "PIX";
 
         if (pagamento === "cartao") {
-            formaPagamentoTexto = `Cartão (${tipoCartao === "credito" ? "Crédito" : "Débito"})`;
+            formaPagamentoTexto = `Cartao (${tipoCartao === "credito" ? "Credito" : "Debito"})`;
         } else if (pagamento === "dinheiro") {
             formaPagamentoTexto = "Dinheiro";
         }
@@ -560,16 +560,16 @@ setIdEstabelecimento(dadosLoja.id_estabelecimento);
                 const qtd = Number(item.qtd ?? 1);
                 return `${qtd}x ${item.nome}`;
             })
-            .join(", ");
+            .join("\n");
 
         const mensagem =
-            `🛎️ NOVO PEDIDO #${idPedido}\n\n` +
-            `👤 Cliente: ${nomeFormatado}\n` +
-            `📱 WhatsApp: ${fone}\n\n` +
-            `🍔 Itens:\n${itensResumo}\n\n` +
-            `💰 Total: ${fmt(totalCart + frete)}\n` +
-            `💳 Pagamento: ${formaPagamentoTexto}\n\n` +
-            `📍 Endereço:\n${enderecoCompleto}`;
+            `NOVO PEDIDO #${idPedido}\n\n` +
+            `Cliente: ${nomeFormatado}\n` +
+            `WhatsApp: ${fone}\n\n` +
+            `Itens:\n${itensResumo}\n\n` +
+            `Total: ${fmt(totalCart + frete)}\n` +
+            `Pagamento: ${formaPagamentoTexto}\n\n` +
+            `Endereco:\n${enderecoCompleto}`;
 
         const payload = {
             id_estabelecimento: idEstabelecimento,
@@ -579,8 +579,9 @@ setIdEstabelecimento(dadosLoja.id_estabelecimento);
         };
 
         await api.post("/notificacoes/publico", payload);
+
     } catch (err) {
-        console.error("=== ERRO AO ENVIAR NOTIFICAÇÃO ===");
+        console.error("=== ERRO AO ENVIAR NOTIFICACAO ===");
         console.error(err.response?.data || err);
     }
 }

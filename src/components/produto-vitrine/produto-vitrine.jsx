@@ -20,6 +20,11 @@ function ProdutoVitrine(props) {
     const fotoProduto = props.foto || "https://placehold.co/300x300?text=Sem+Foto";
     const formatar = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
+    // Se "estoque" vier null/undefined, tratamos como produto sem controle de estoque (sem limite).
+    const temControleEstoque = props.estoque !== null && props.estoque !== undefined;
+    const estoqueDisponivel = temControleEstoque ? Number(props.estoque) : null;
+    const atingiuLimiteEstoque = temControleEstoque && qtd >= estoqueDisponivel;
+
     useEffect(() => {
         if (!aberto) return;
         setCarregando(true);
@@ -29,6 +34,18 @@ function ProdutoVitrine(props) {
             .catch(() => setOpcoes([]))
             .finally(() => setCarregando(false));
     }, [aberto, props.id_produto]);
+
+    // Sempre que o modal abre, garante que a qtd inicial não ultrapasse o estoque disponível
+    useEffect(() => {
+        if (aberto && temControleEstoque && estoqueDisponivel > 0 && qtd > estoqueDisponivel) {
+            setQtd(estoqueDisponivel);
+        }
+    }, [aberto, temControleEstoque, estoqueDisponivel]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const incrementarQtd = () => {
+        if (atingiuLimiteEstoque) return;
+        setQtd(q => q + 1);
+    };
 
     const alterarQtdItem = (id_opcao, item, delta, qtd_max) => {
         setSelecionados(prev => {
@@ -171,8 +188,21 @@ return (
                                 <div className="contador-produto-principal">
                                     <button onClick={() => qtd > 1 && setQtd(qtd - 1)}>-</button>
                                     <span>{qtd}</span>
-                                    <button onClick={() => setQtd(qtd + 1)}>+</button>
+                                    <button
+                                        onClick={incrementarQtd}
+                                        disabled={atingiuLimiteEstoque}
+                                        style={atingiuLimiteEstoque ? { opacity: 0.4, cursor: "not-allowed" } : undefined}
+                                    >
+                                        +
+                                    </button>
                                 </div>
+                                {atingiuLimiteEstoque && (
+                                    <p className="aviso-estoque" style={{ color: "#c0392b", fontSize: 13, margin: "4px 0 0" }}>
+                                        {estoqueDisponivel === 1
+                                            ? "Só temos 1 em estoque"
+                                            : `Só temos ${estoqueDisponivel} em estoque`}
+                                    </p>
+                                )}
                                 <button className="btn-enviar-carrinho" onClick={handleAdicionarModal}>
                                     ADICIONAR • {formatar(totalFinal)}
                                 </button>

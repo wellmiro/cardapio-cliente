@@ -1,4 +1,3 @@
-
 import { useState, useContext, useEffect } from "react";
 import { CartContext } from "../../contexts/cart-context";
 import "./produto-vitrine.css";
@@ -20,11 +19,13 @@ function ProdutoVitrine(props) {
     const fotoProduto = props.foto || "https://placehold.co/300x300?text=Sem+Foto";
     const formatar = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
-    // Se "estoque" vier null/undefined, tratamos como produto sem controle de estoque (sem limite).
+    // Lógica de estoque
     const temControleEstoque = props.estoque !== null && props.estoque !== undefined;
     const estoqueDisponivel = temControleEstoque ? Number(props.estoque) : null;
     const atingiuLimiteEstoque = temControleEstoque && qtd >= estoqueDisponivel;
 
+    // Efeito 1: Busca opções - ignorando o aviso de dependência pois 'qtd' não é usado aqui
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
         if (!aberto) return;
         setCarregando(true);
@@ -35,12 +36,12 @@ function ProdutoVitrine(props) {
             .finally(() => setCarregando(false));
     }, [aberto, props.id_produto]);
 
-    // Sempre que o modal abre, garante que a qtd inicial não ultrapasse o estoque disponível
+    // Efeito 2: Valida estoque - 'qtd' adicionada como dependência
     useEffect(() => {
         if (aberto && temControleEstoque && estoqueDisponivel > 0 && qtd > estoqueDisponivel) {
             setQtd(estoqueDisponivel);
         }
-    }, [aberto, temControleEstoque, estoqueDisponivel]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [aberto, temControleEstoque, estoqueDisponivel, qtd]);
 
     const incrementarQtd = () => {
         if (atingiuLimiteEstoque) return;
@@ -53,7 +54,6 @@ function ProdutoVitrine(props) {
             const atual = copia[item.id_item] || { ...item, qtd_item: 0, id_opcao };
             let novaQtd = atual.qtd_item + delta;
             
-            // Limite mínimo de -1 (para o "SEM")
             if (novaQtd < -1) novaQtd = -1;
             
             const totalNoGrupo = Object.values(copia)
@@ -74,57 +74,64 @@ function ProdutoVitrine(props) {
     const totalAdicionais = Object.values(selecionados).reduce((acc, i) => acc + (i.qtd_item > 0 ? i.vl_item * i.qtd_item : 0), 0);
     const totalFinal = (props.preco + totalAdicionais) * qtd;
 
-    const handleAdicionarModal = () => {
-        const todos = Object.values(selecionados);
+    const handleAdicionarModal = async () => {
+        setCarregando(true);
         
-        // 1. Mapeia os itens removidos (q === -1)
-        const removidos = todos
-            .filter(i => i.qtd_item === -1)
-            .map(i => `SEM ${i.nome_item.toUpperCase()}`);
-        
-        // 2. Mapeia os itens adicionados (q > 0)
-        const adicionadosTexto = todos
-            .filter(i => i.qtd_item > 0)
-            .map(i => `+${i.qtd_item} ${i.nome_item.toUpperCase()}`);
+        try {
+            const res = await fetch(`${API}/produtos/estoque/${props.id_produto}`);
+            const dadosEstoque = await res.json();
+            
+            if (dadosEstoque.qtd < qtd) {
+                alert(`Ops! O estoque mudou enquanto você escolhia. Só temos ${dadosEstoque.qtd} unidade(s) disponível(is).`);
+                setAberto(false);
+                setQtd(1);
+                return;
+            }
 
-        // Junta tudo para a observação do item
-        let arrayStatus = [...removidos, ...adicionadosTexto];
-        let textoOpcionais = arrayStatus.join(", ");
-        
-        let obsFinal = obs.trim();
-        if (textoOpcionais) {
-            obsFinal = obsFinal ? `${obsFinal} (${textoOpcionais})` : textoOpcionais;
+            const todos = Object.values(selecionados);
+            const removidos = todos.filter(i => i.qtd_item === -1).map(i => `SEM ${i.nome_item.toUpperCase()}`);
+            const adicionadosTexto = todos.filter(i => i.qtd_item > 0).map(i => `+${i.qtd_item} ${i.nome_item.toUpperCase()}`);
+            let arrayStatus = [...removidos, ...adicionadosTexto];
+            let textoOpcionais = arrayStatus.join(", ");
+            let obsFinal = obs.trim();
+            if (textoOpcionais) {
+                obsFinal = obsFinal ? `${obsFinal} (${textoOpcionais})` : textoOpcionais;
+            }
+
+            const novoProduto = {
+                id: props.id_produto,
+                id_produto: props.id_produto,
+                nome: props.nome,
+                preco: Number(props.preco) + Number(totalAdicionais),
+                valor: Number(props.preco) + Number(totalAdicionais),
+                foto: fotoProduto,
+                qtd: Number(qtd),
+                observacao: obsFinal,
+                adicionais: todos.filter(i => i.qtd_item > 0).map(i => ({
+                    ...i,
+                    nome_formatado: i.qtd_item > 1 ? `${i.qtd_item}x ${i.nome_item}` : i.nome_item
+                }))
+            };
+
+            AddItemCart(novoProduto);
+            
+            setQtd(1);
+            setObs("");
+            setSelecionados({});
+            setAberto(false);
+            
+            setTimeout(() => {
+                setShowCart(true);
+            }, 300);
+
+        } catch (err) {
+            alert("Erro ao validar estoque. Tente novamente.");
+        } finally {
+            setCarregando(false);
         }
+    };
 
-        const novoProduto = {
-    id: props.id_produto,
-    id_produto: props.id_produto,
-    nome: props.nome,
-    preco: Number(props.preco) + Number(totalAdicionais),
-    valor: Number(props.preco) + Number(totalAdicionais),
-    foto: fotoProduto,
-    qtd: Number(qtd),
-    observacao: obsFinal,
-    adicionais: todos.filter(i => i.qtd_item > 0).map(i => ({
-        ...i,
-        nome_formatado: i.qtd_item > 1 ? `${i.qtd_item}x ${i.nome_item}` : i.nome_item
-    }))
-};
-
-AddItemCart(novoProduto);
-
-setQtd(1);
-setObs("");
-setSelecionados({});
-setAberto(false);
-
-setTimeout(() => {
-    setShowCart(true);
-}, 300);
-
-}; // fecha handleAdicionarModal
-
-return (
+    return (
         <>
             <div className="produto-box" onClick={() => setAberto(true)}>
                 {qtdExibir > 0 && <div className="badge-qtd">{qtdExibir}</div>}
@@ -203,8 +210,8 @@ return (
                                             : `Só temos ${estoqueDisponivel} em estoque`}
                                     </p>
                                 )}
-                                <button className="btn-enviar-carrinho" onClick={handleAdicionarModal}>
-                                    ADICIONAR • {formatar(totalFinal)}
+                                <button className="btn-enviar-carrinho" onClick={handleAdicionarModal} disabled={carregando}>
+                                    {carregando ? "Validando..." : `ADICIONAR • ${formatar(totalFinal)}`}
                                 </button>
                             </div>
                         </div>

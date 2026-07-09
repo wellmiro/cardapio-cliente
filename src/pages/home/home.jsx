@@ -32,7 +32,16 @@ function Home() {
       const dadosProdutos = resProdutos.data;
       setEstaAberto(dadosProdutos.esta_aberto);
       setHorarios(dadosProdutos.configuracoes || {});
-      setProdutos(dadosProdutos.lista_produtos || []);
+
+      // Só exibimos produtos com estoque disponível.
+      // Se "qtd" vier null/undefined, tratamos como "sem controle de estoque" (sempre disponível).
+      const todosProdutos = dadosProdutos.lista_produtos || [];
+      const produtosComEstoque = todosProdutos.filter(p => {
+        if (p.qtd === null || p.qtd === undefined) return true;
+        return Number(p.qtd) > 0;
+      });
+
+      setProdutos(produtosComEstoque);
       setCategorias(resCategorias.data || []);
     } catch (err) {
       console.error("Erro ao carregar dados", err);
@@ -132,6 +141,7 @@ function Home() {
                     preco={prod.preco}
                     foto={prod.url_foto || imagemPadrao}
                     descricao={prod.descricao}
+                    estoque={prod.qtd}
                   />
                 ))}
               </div>

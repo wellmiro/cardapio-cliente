@@ -1,132 +1,89 @@
-import { createContext, useState, useEffect } from "react";
+import { createContext, useState } from "react";
 
-const CartContext = createContext();
+export const CartContext = createContext();
 
-function CartProvider(props) {
+// Considera "o mesmo item" quando é o mesmo produto E tem a mesma observação
+// (a observação já carrega o texto dos adicionais/opcionais escolhidos).
+function mesmoItem(a, b) {
+    const idA = a.id ?? a.id_produto;
+    const idB = b.id ?? b.id_produto;
+    if (idA !== idB) return false;
+    return (a.observacao || "") === (b.observacao || "");
+}
+
+function calcularTotal(itens) {
+    return itens.reduce((acc, item) => {
+        const preco = Number(item.preco ?? item.valor ?? 0);
+        const qtd = Number(item.qtd ?? 1);
+        return acc + preco * qtd;
+    }, 0);
+}
+
+export function CartProvider({ children }) {
+    const [cartItems, setCartItems] = useState([]);
+    const [totalCart, setTotalCart] = useState(0);
     const [showCart, setShowCart] = useState(false);
 
-    // Pegamos o estabelecimento atual para criar uma chave única no localStorage
-    const getCartKey = () => {
-        const slugAtual = localStorage.getItem("slug") || "default";
-        return `99burger:cart_${slugAtual}`;
-    };
+    // Adiciona um item novo, ou soma a quantidade se já existir um igual (mesmo produto + mesma observação)
+    function AddItemCart(produto) {
+        setCartItems(prev => {
+            const qtdAdicionar = Number(produto.qtd ?? 1);
+            const existente = prev.find(item => mesmoItem(item, produto));
 
-    const getTimestampKey = () => {
-        const slugAtual = localStorage.getItem("slug") || "default";
-        return `99burger:cart_timestamp_${slugAtual}`;
-    };
-
-    const [cartItems, setCartItems] = useState(() => {
-        // Agora busca a sacola específica deste estabelecimento
-        const cartKey = localStorage.getItem("slug") ? `99burger:cart_${localStorage.getItem("slug")}` : "99burger:cart_default";
-        const timeKey = localStorage.getItem("slug") ? `99burger:cart_timestamp_${localStorage.getItem("slug")}` : "99burger:cart_timestamp_default";
-        
-        const itensSalvos = localStorage.getItem(cartKey);
-        const dataSalva = localStorage.getItem(timeKey);
-
-        if (itensSalvos && dataSalva) {
-            const agora = new Date().getTime();
-            const tresHoras = 3 * 60 * 60 * 1000;
-
-            if (agora - parseInt(dataSalva) > tresHoras) {
-                localStorage.removeItem(cartKey);
-                localStorage.removeItem(timeKey);
-                return [];
+            let novo;
+            if (existente) {
+                novo = prev.map(item =>
+                    mesmoItem(item, produto)
+                        ? { ...item, qtd: Number(item.qtd ?? 1) + qtdAdicionar }
+                        : item
+                );
+            } else {
+                novo = [...prev, { ...produto, qtd: qtdAdicionar }];
             }
-            return JSON.parse(itensSalvos);
-        }
-        return [];
-    });
 
-    const [totalCart, setTotalCart] = useState(0);
-
-    // Efeito para recarregar o carrinho caso o usuário mude de página/estabelecimento
-    useEffect(() => {
-        const cartKey = getCartKey();
-        const itensSalvos = localStorage.getItem(cartKey);
-        if (itensSalvos) {
-            setCartItems(JSON.parse(itensSalvos));
-        } else {
-            setCartItems([]);
-        }
-    }, [window.location.pathname]); // Monitora a mudança de rota
-
-    useEffect(() => {
-        // Salva na chave única do estabelecimento atual
-        const cartKey = getCartKey();
-        const timeKey = getTimestampKey();
-        
-        localStorage.setItem(cartKey, JSON.stringify(cartItems));
-        localStorage.setItem(timeKey, new Date().getTime().toString());
-        CalculoTotal(cartItems);
-    }, [cartItems]);
-
-    function AddItemCart(item) {
-        let cartItemsNovo = [...cartItems];
-        let itemEncontrado = false;
-
-        for (var i = 0; i < cartItemsNovo.length; i++) {
-            if (cartItemsNovo[i].id === item.id && cartItemsNovo[i].observacao === item.observacao) {
-                itemEncontrado = true;
-                cartItemsNovo[i].qtd = cartItemsNovo[i].qtd + item.qtd;
-            }
-        }
-
-        if (!itemEncontrado) {
-            cartItemsNovo.push(item);
-        }
-
-        setCartItems(cartItemsNovo);
-        setShowCart(true); 
-    }
-
-    function RemoveItemCart(id, observacao) {
-        let cartItemsNovo = [...cartItems];
-
-        cartItemsNovo = cartItemsNovo.map(item => {
-            if (item.id === id && item.observacao === observacao) {
-                return { ...item, qtd: item.qtd - 1 };
-            }
-            return item;
+            setTotalCart(calcularTotal(novo));
+            return novo;
         });
-
-        cartItemsNovo = cartItemsNovo.filter(item => item.qtd > 0);
-        setCartItems(cartItemsNovo);
     }
 
-    function LimparCart() {
-        const cartKey = getCartKey();
-        const timeKey = getTimestampKey();
-        
-        setCartItems([]);
-        setTotalCart(0);
-        localStorage.removeItem(cartKey);
-        localStorage.removeItem(timeKey);
-    }
+    // Remove 1 unidade do item (identificado por id + observação). Se chegar a 0, remove o item da lista.
+    function RemoveItemCart(id, observacao) {
+        setCartItems(prev => {
+            const alvo = prev.find(item =>
+                (item.id ?? item.id_produto) === id &&
+                (item.observacao || "") === (observacao || "")
+            );
 
-    function CalculoTotal(items) {
-        let soma = 0;
-        for (var i = 0; i < items.length; i++) {
-            soma = soma + (items[i].preco * items[i].qtd);
-        }
-        setTotalCart(soma);
+            if (!alvo) return prev;
+
+            let novo;
+            if (Number(alvo.qtd ?? 1) <= 1) {
+                novo = prev.filter(item => item !== alvo);
+            } else {
+                novo = prev.map(item =>
+                    item === alvo ? { ...item, qtd: Number(item.qtd) - 1 } : item
+                );
+            }
+
+            setTotalCart(calcularTotal(novo));
+            return novo;
+        });
     }
 
     return (
-        <CartContext.Provider value={{ 
-            cartItems, 
-            setCartItems, 
-            AddItemCart, 
-            RemoveItemCart, 
-            totalCart, 
-            setTotalCart, 
-            LimparCart,
-            showCart,    
-            setShowCart  
-        }}>
-            {props.children}
+        <CartContext.Provider
+            value={{
+                cartItems,
+                setCartItems,
+                totalCart,
+                setTotalCart,
+                showCart,
+                setShowCart,
+                AddItemCart,
+                RemoveItemCart
+            }}
+        >
+            {children}
         </CartContext.Provider>
     );
 }
-
-export { CartContext, CartProvider };

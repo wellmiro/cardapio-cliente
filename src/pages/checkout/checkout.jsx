@@ -155,8 +155,15 @@ export function Checkout() {
     const [configCarregada, setConfigCarregada] = useState(false);
     const [idEstabelecimento, setIdEstabelecimento] = useState(null);
 
+    // true quando o estabelecimento não tem NENHUMA config de entrega (lat/lng/taxa/km zerados)
+    // nesse caso o pedido só pode ser "retirada no local"
+    const [somenteRetirada, setSomenteRetirada] = useState(false);
+
     const [nome, setNome] = useState("");
     const [fone, setFone] = useState("");
+
+    // "entrega" | "retirada" | null (ainda não escolhido)
+    const [tipoEntrega, setTipoEntrega] = useState(null);
 
     const [entregaEtapa, setEntregaEtapa] = useState("metodo");
     const [metodoEntrega, setMetodoEntrega] = useState("endereco");
@@ -201,12 +208,10 @@ export function Checkout() {
                     return;
                 }
 
-const res = await api.get(`/estabelecimentos/${slugAtual}`);
-const dadosLoja = res.data || {};
+                const res = await api.get(`/estabelecimentos/${slugAtual}`);
+                const dadosLoja = res.data || {};
 
-console.log("ESTABELECIMENTO:", dadosLoja);
-
-setIdEstabelecimento(dadosLoja.id_estabelecimento || null);
+                setIdEstabelecimento(dadosLoja.id_estabelecimento || null);
 
                 const latOrigem = parseCoord(dadosLoja.latitude);
                 const lngOrigem = parseCoord(dadosLoja.longitude);
@@ -214,14 +219,25 @@ setIdEstabelecimento(dadosLoja.id_estabelecimento || null);
                 const precoKmBanco = parseCoord(dadosLoja.preco_km) || 0;
                 const precoKm = precoKmBanco > 0 ? precoKmBanco : 1;
 
-                setIdEstabelecimento(dadosLoja.id_estabelecimento || null);
-
                 setConfigFrete({
                     latOrigem,
                     lngOrigem,
                     taxaBase,
                     precoKm
                 });
+
+                // Se não há lat/lng E não há taxa base E não há preço por km configurados,
+                // o estabelecimento não trabalha com entrega -> força retirada no local.
+                const semNenhumaConfigDeEntrega =
+                    latOrigem === null &&
+                    lngOrigem === null &&
+                    taxaBase <= 0 &&
+                    precoKmBanco <= 0;
+
+                if (semNenhumaConfigDeEntrega) {
+                    setSomenteRetirada(true);
+                    setTipoEntrega("retirada");
+                }
 
                 if (latOrigem !== null && lngOrigem !== null) {
                     setPosicao([latOrigem, lngOrigem]);
@@ -437,6 +453,11 @@ setIdEstabelecimento(dadosLoja.id_estabelecimento || null);
             return false;
         }
 
+        if (!tipoEntrega) {
+            alerta("Escolha se o pedido é para entrega ou retirada no local.");
+            return false;
+        }
+
         setNome(formatarNomeProprio(nome));
         return true;
     }
@@ -457,6 +478,9 @@ setIdEstabelecimento(dadosLoja.id_estabelecimento || null);
     }
 
     function validarStep2() {
+        // Retirada no local não passa pelas validações de endereço
+        if (tipoEntrega === "retirada") return true;
+
         if (entregaEtapa === "metodo") {
             continuarEntregaMetodo();
             return false;
@@ -527,7 +551,21 @@ setIdEstabelecimento(dadosLoja.id_estabelecimento || null);
     }
 
     const navigateNext = () => {
-        if (step === 1 && !validarStep1()) return;
+        if (step === 1) {
+            if (!validarStep1()) return;
+
+            // Retirada no local: pula a etapa de endereço/entrega inteira
+            if (tipoEntrega === "retirada") {
+                setFrete(0);
+                setEnderecoConfirmado(true);
+                setStep(3);
+                return;
+            }
+
+            setStep(2);
+            return;
+        }
+
         if (step === 2 && !validarStep2()) return;
         if (step === 3 && !validarStep3()) return;
 
@@ -535,6 +573,11 @@ setIdEstabelecimento(dadosLoja.id_estabelecimento || null);
     };
 
     const navigateBack = () => {
+        if (step === 3 && tipoEntrega === "retirada") {
+            setStep(1);
+            return;
+        }
+
         if (step === 2 && entregaEtapa === "detalhes") {
             setEntregaEtapa("metodo");
             return;
@@ -543,48 +586,52 @@ setIdEstabelecimento(dadosLoja.id_estabelecimento || null);
         setStep(s => Math.max(s - 1, 1));
     };
 
- async function enviarNotificacaoNovoPedido(enderecoCompleto, idPedido) {
-    try {
-        let formaPagamentoTexto = "PIX";
+    async function enviarNotificacaoNovoPedido(enderecoCompleto, idPedido) {
+        try {
+            let formaPagamentoTexto = "PIX";
 
-        if (pagamento === "cartao") {
-            formaPagamentoTexto = `Cartao (${tipoCartao === "credito" ? "Credito" : "Debito"})`;
-        } else if (pagamento === "dinheiro") {
-            formaPagamentoTexto = "Dinheiro";
+            if (pagamento === "cartao") {
+                formaPagamentoTexto = `Cartao (${tipoCartao === "credito" ? "Credito" : "Debito"})`;
+            } else if (pagamento === "dinheiro") {
+                formaPagamentoTexto = "Dinheiro";
+            }
+
+            const nomeFormatado = formatarNomeProprio(nome);
+
+            const itensResumo = cartItems
+                .map(item => {
+                    const qtd = Number(item.qtd ?? 1);
+                    return `${qtd}x ${item.nome}`;
+                })
+                .join("\n");
+
+            const linhaEndereco = tipoEntrega === "retirada"
+                ? "RETIRADA NO LOCAL"
+                : `Endereco:\n${enderecoCompleto}`;
+
+            const mensagem =
+                `NOVO PEDIDO #${idPedido}\n\n` +
+                `Cliente: ${nomeFormatado}\n` +
+                `WhatsApp: ${fone}\n\n` +
+                `Itens:\n${itensResumo}\n\n` +
+                `Total: ${fmt(totalCart + frete)}\n` +
+                `Pagamento: ${formaPagamentoTexto}\n\n` +
+                `${linhaEndereco}`;
+
+            const payload = {
+                id_estabelecimento: idEstabelecimento,
+                mensagem,
+                id_pedido: idPedido,
+                id_produto: null
+            };
+
+            await api.post("/notificacoes/publico", payload);
+
+        } catch (err) {
+            console.error("=== ERRO AO ENVIAR NOTIFICACAO ===");
+            console.error(err.response?.data || err);
         }
-
-        const nomeFormatado = formatarNomeProprio(nome);
-
-        const itensResumo = cartItems
-            .map(item => {
-                const qtd = Number(item.qtd ?? 1);
-                return `${qtd}x ${item.nome}`;
-            })
-            .join("\n");
-
-        const mensagem =
-            `NOVO PEDIDO #${idPedido}\n\n` +
-            `Cliente: ${nomeFormatado}\n` +
-            `WhatsApp: ${fone}\n\n` +
-            `Itens:\n${itensResumo}\n\n` +
-            `Total: ${fmt(totalCart + frete)}\n` +
-            `Pagamento: ${formaPagamentoTexto}\n\n` +
-            `Endereco:\n${enderecoCompleto}`;
-
-        const payload = {
-            id_estabelecimento: idEstabelecimento,
-            mensagem,
-            id_pedido: idPedido,
-            id_produto: null
-        };
-
-        await api.post("/notificacoes/publico", payload);
-
-    } catch (err) {
-        console.error("=== ERRO AO ENVIAR NOTIFICACAO ===");
-        console.error(err.response?.data || err);
     }
-}
 
     async function finalizarPedido() {
         if (!cartItems || cartItems.length === 0 || totalCart <= 0) {
@@ -610,14 +657,17 @@ setIdEstabelecimento(dadosLoja.id_estabelecimento || null);
             }
 
             const nomeFormatado = formatarNomeProprio(nome);
+            const ehRetirada = tipoEntrega === "retirada";
 
-            const enderecoCompleto = [
-                endereco,
-                numero,
-                complemento,
-                bairro,
-                cidade && `${cidade}/${uf}`
-            ].filter(Boolean).join(", ");
+            const enderecoCompleto = ehRetirada
+                ? "Retirada no estabelecimento"
+                : [
+                    endereco,
+                    numero,
+                    complemento,
+                    bairro,
+                    cidade && `${cidade}/${uf}`
+                ].filter(Boolean).join(", ");
 
             const itensPedido = cartItems.map(i => {
                 const precoItem = Number(i.preco ?? i.valor ?? 0);
@@ -633,20 +683,24 @@ setIdEstabelecimento(dadosLoja.id_estabelecimento || null);
                 };
             });
 
+            const vlEntrega = ehRetirada ? 0 : frete;
+
             const payload = {
                 slug: slugAtual,
                 session_id,
                 nome_cliente: nomeFormatado,
                 fone_cliente: fone,
                 vl_subtotal: totalCart,
-                vl_entrega: frete,
-                vl_total: totalCart + frete,
-                endereco_entrega: enderecoCompleto + (referencia ? ` | Ref: ${referencia}` : ""),
-                rota: posicao ? `https://www.google.com/maps?q=${posicao[0]},${posicao[1]}` : "",
+                vl_entrega: vlEntrega,
+                vl_total: totalCart + vlEntrega,
+                endereco_entrega: ehRetirada
+                    ? enderecoCompleto
+                    : enderecoCompleto + (referencia ? ` | Ref: ${referencia}` : ""),
+                rota: (!ehRetirada && posicao) ? `https://www.google.com/maps?q=${posicao[0]},${posicao[1]}` : "",
                 forma_pagamento,
                 dinheiro: pagamento === "dinheiro" ? Number(dinheiro) : 0,
-                troco: pagamento === "dinheiro" ? Number(dinheiro) - (totalCart + frete) : 0,
-                local_consumo: "DELIVERY",
+                troco: pagamento === "dinheiro" ? Number(dinheiro) - (totalCart + vlEntrega) : 0,
+                local_consumo: ehRetirada ? "RETIRADA" : "DELIVERY",
                 itens: itensPedido
             };
 
@@ -668,8 +722,12 @@ setIdEstabelecimento(dadosLoja.id_estabelecimento || null);
     }
 
     const STEPS = ["Dados", "Entrega", "Pagamento", "Revisão"];
-    const totalPedido = totalCart + frete;
+    const totalPedido = totalCart + (tipoEntrega === "retirada" ? 0 : frete);
     const freteFixoAtivo = configFrete.taxaBase > 0;
+
+    // Para o stepper visual, quando é retirada a etapa "Entrega" é pulada,
+    // então tratamos o "step" 3 (Pagamento) como se fosse a posição 2 no indicador.
+    const stepVisual = (tipoEntrega === "retirada" && step >= 3) ? step - 1 : step;
 
     return (
         <div className="checkout-page">
@@ -691,8 +749,8 @@ setIdEstabelecimento(dadosLoja.id_estabelecimento || null);
                 <div className="stepper">
                     {STEPS.map((label, i) => {
                         const num = i + 1;
-                        const done = step > num;
-                        const active = step === num;
+                        const done = stepVisual > num;
+                        const active = stepVisual === num;
 
                         return (
                             <div key={num} className={`stepper-item ${active ? "active" : ""} ${done ? "done" : ""}`}>
@@ -728,13 +786,41 @@ setIdEstabelecimento(dadosLoja.id_estabelecimento || null);
                             />
                         </div>
 
+                        <div className="input-group espacamento-top">
+                            <label>Como você quer receber seu pedido? <span className="obrig">*</span></label>
+
+                            {somenteRetirada ? (
+                                <p className="campo-dica-erro" style={{ color: "inherit" }}>
+                                    Este estabelecimento funciona apenas por retirada no local.
+                                </p>
+                            ) : (
+                                <div className="payment-selector">
+                                    <button
+                                        type="button"
+                                        className={`pay-btn ${tipoEntrega === "entrega" ? "active" : ""}`}
+                                        onClick={() => setTipoEntrega("entrega")}
+                                    >
+                                        Entrega
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        className={`pay-btn ${tipoEntrega === "retirada" ? "active" : ""}`}
+                                        onClick={() => setTipoEntrega("retirada")}
+                                    >
+                                        Retirada no local
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
                         <button className="btn-checkout espacamento-top" onClick={navigateNext}>
                             Continuar
                         </button>
                     </div>
                 )}
 
-                {step === 2 && entregaEtapa === "metodo" && (
+                {step === 2 && tipoEntrega === "entrega" && entregaEtapa === "metodo" && (
                     <div className="box-checkout">
                         <h3 className="box-title">Entrega</h3>
 
@@ -923,7 +1009,7 @@ setIdEstabelecimento(dadosLoja.id_estabelecimento || null);
                     </div>
                 )}
 
-                {step === 2 && entregaEtapa === "detalhes" && (
+                {step === 2 && tipoEntrega === "entrega" && entregaEtapa === "detalhes" && (
                     <div className="box-checkout">
                         <h3 className="box-title">Conferir entrega</h3>
 
@@ -1056,6 +1142,10 @@ setIdEstabelecimento(dadosLoja.id_estabelecimento || null);
                     <div className="box-checkout">
                         <h3 className="box-title">Pagamento</h3>
 
+                        <p className="campo-dica-erro" style={{ color: "inherit", marginBottom: 12 }}>
+                            Pagamento realizado {tipoEntrega === "retirada" ? "na retirada" : "na entrega"}. Ainda não aceitamos pagamento online.
+                        </p>
+
                         <div className="payment-selector">
                             {[
                                 { id: "pix", label: "PIX" },
@@ -1121,8 +1211,14 @@ setIdEstabelecimento(dadosLoja.id_estabelecimento || null);
 
                         <div className="revisao-secao">
                             <p><strong>{formatarNomeProprio(nome)}</strong> — {fone}</p>
-                            <p>{endereco}, {numero} {complemento && `- ${complemento}`}</p>
-                            <p>{bairro} - {cidade}/{uf}</p>
+                            {tipoEntrega === "retirada" ? (
+                                <p><strong>Retirada no estabelecimento</strong></p>
+                            ) : (
+                                <>
+                                    <p>{endereco}, {numero} {complemento && `- ${complemento}`}</p>
+                                    <p>{bairro} - {cidade}/{uf}</p>
+                                </>
+                            )}
                         </div>
 
                         <div className="revisao-secao">
@@ -1155,7 +1251,7 @@ setIdEstabelecimento(dadosLoja.id_estabelecimento || null);
 
                             <div className="valor-linha">
                                 <span>Entrega</span>
-                                <span>{fmt(frete)}</span>
+                                <span>{tipoEntrega === "retirada" ? "Grátis (retirada)" : fmt(frete)}</span>
                             </div>
 
                             <div className="valor-linha total">

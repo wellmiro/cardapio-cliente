@@ -106,6 +106,14 @@ function formatarNomeProprio(valor) {
         .join(" ");
 }
 
+function formatarCPF(v) {
+    const nums = String(v).replace(/\D/g, "").slice(0, 11);
+    if (nums.length <= 3) return nums;
+    if (nums.length <= 6) return `${nums.slice(0, 3)}.${nums.slice(3)}`;
+    if (nums.length <= 9) return `${nums.slice(0, 3)}.${nums.slice(3, 6)}.${nums.slice(6)}`;
+    return `${nums.slice(0, 3)}.${nums.slice(3, 6)}.${nums.slice(6, 9)}-${nums.slice(9)}`;
+}
+
 function MapRefresher({ center }) {
     const map = useMap();
 
@@ -143,6 +151,7 @@ export function Checkout() {
     const [tipoAlert, setTipoAlert] = useState("erro");
     const [showSucesso, setShowSucesso] = useState(false);
     const [enviando, setEnviando] = useState(false);
+    const [pedidoBloqueado, setPedidoBloqueado] = useState(false);
     const [step, setStep] = useState(1);
 
     const [configFrete, setConfigFrete] = useState({
@@ -155,14 +164,13 @@ export function Checkout() {
     const [configCarregada, setConfigCarregada] = useState(false);
     const [idEstabelecimento, setIdEstabelecimento] = useState(null);
 
-    // true quando o estabelecimento não tem NENHUMA config de entrega (lat/lng/taxa/km zerados)
-    // nesse caso o pedido só pode ser "retirada no local"
     const [somenteRetirada, setSomenteRetirada] = useState(false);
 
     const [nome, setNome] = useState("");
     const [fone, setFone] = useState("");
+    const [email, setEmail] = useState("");
+    const [cpf, setCpf] = useState("");
 
-    // "entrega" | "retirada" | null (ainda não escolhido)
     const [tipoEntrega, setTipoEntrega] = useState(null);
 
     const [entregaEtapa, setEntregaEtapa] = useState("metodo");
@@ -191,9 +199,16 @@ export function Checkout() {
     const [uf, setUf] = useState("");
     const [referencia, setReferencia] = useState("");
 
-    const [pagamento, setPagamento] = useState("");
+    const [pagamento, setPagamento] = useState("pix");
     const [tipoCartao, setTipoCartao] = useState("");
     const [dinheiro, setDinheiro] = useState("");
+
+    // Estados do Mercado Pago (PIX)
+    const [pixGerado, setPixGerado] = useState(false);
+    const [pixQrCodeBase64, setPixQrCodeBase64] = useState("");
+    const [pixCopiaECola, setPixCopiaECola] = useState("");
+    const [mpPaymentId, setMpPaymentId] = useState(null);
+    const [copiado, setCopiado] = useState(false);
 
     const mapaPreviewRef = useRef(null);
     const mapaDetalhesRef = useRef(null);
@@ -226,8 +241,6 @@ export function Checkout() {
                     precoKm
                 });
 
-                // Se não há lat/lng E não há taxa base E não há preço por km configurados,
-                // o estabelecimento não trabalha com entrega -> força retirada no local.
                 const semNenhumaConfigDeEntrega =
                     latOrigem === null &&
                     lngOrigem === null &&
@@ -255,6 +268,32 @@ export function Checkout() {
 
         carregarConfiguracoesLoja();
     }, []);
+
+    // Monitoring do status do Pix a cada 3 segundos
+    useEffect(() => {
+        let interval = null;
+
+        if (pixGerado && mpPaymentId) {
+            interval = setInterval(async () => {
+                try {
+                    const res = await api.get(`/pix/status/${mpPaymentId}`);
+                    if (res.data.pago || res.data.status === "approved") {
+                        clearInterval(interval);
+                        
+                        setCartItems([]);
+                        setTotalCart(0);
+                        setShowSucesso(true);
+                    }
+                } catch (err) {
+                    console.error("Erro ao verificar status do Pix:", err);
+                }
+            }, 3000);
+        }
+
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [pixGerado, mpPaymentId, setCartItems, setTotalCart]);
 
     const alerta = (msg, tipo = "erro") => {
         setMsgAlert(msg);
@@ -478,7 +517,6 @@ export function Checkout() {
     }
 
     function validarStep2() {
-        // Retirada no local não passa pelas validações de endereço
         if (tipoEntrega === "retirada") return true;
 
         if (entregaEtapa === "metodo") {
@@ -554,7 +592,6 @@ export function Checkout() {
         if (step === 1) {
             if (!validarStep1()) return;
 
-            // Retirada no local: pula a etapa de endereço/entrega inteira
             if (tipoEntrega === "retirada") {
                 setFrete(0);
                 setEnderecoConfirmado(true);
@@ -586,7 +623,7 @@ export function Checkout() {
         setStep(s => Math.max(s - 1, 1));
     };
 
-    async function enviarNotificacaoNovoPedido(enderecoCompleto, idPedido) {
+    async function enviarNotificacaoNovoPedidoDireto(enderecoCompleto, idPedido) {
         try {
             let formaPagamentoTexto = "PIX";
 
@@ -634,6 +671,8 @@ export function Checkout() {
     }
 
     async function finalizarPedido() {
+        if (enviando || pedidoBloqueado) return;
+
         if (!cartItems || cartItems.length === 0 || totalCart <= 0) {
             alerta("Sua sacola está vazia. Adicione pelo menos um item antes de finalizar.");
             return;
@@ -648,9 +687,10 @@ export function Checkout() {
         }
 
         setEnviando(true);
+        setPedidoBloqueado(true);
 
         try {
-            let forma_pagamento = pagamento;
+            let forma_pagamento = pagamento === "pix" ? "PIX (Online)" : pagamento;
 
             if (pagamento === "cartao") {
                 forma_pagamento = `Cartão (${tipoCartao})`;
@@ -684,6 +724,7 @@ export function Checkout() {
             });
 
             const vlEntrega = ehRetirada ? 0 : frete;
+            const vlTotalFinal = totalCart + vlEntrega;
 
             const payload = {
                 slug: slugAtual,
@@ -692,41 +733,75 @@ export function Checkout() {
                 fone_cliente: fone,
                 vl_subtotal: totalCart,
                 vl_entrega: vlEntrega,
-                vl_total: totalCart + vlEntrega,
+                vl_total: vlTotalFinal,
                 endereco_entrega: ehRetirada
                     ? enderecoCompleto
                     : enderecoCompleto + (referencia ? ` | Ref: ${referencia}` : ""),
                 rota: (!ehRetirada && posicao) ? `https://www.google.com/maps?q=${posicao[0]},${posicao[1]}` : "",
                 forma_pagamento,
                 dinheiro: pagamento === "dinheiro" ? Number(dinheiro) : 0,
-                troco: pagamento === "dinheiro" ? Number(dinheiro) - (totalCart + vlEntrega) : 0,
+                troco: pagamento === "dinheiro" ? Number(dinheiro) - vlTotalFinal : 0,
                 local_consumo: ehRetirada ? "RETIRADA" : "DELIVERY",
                 itens: itensPedido
             };
 
-            const respostaPedido = await api.post("/pedidos/publico", payload);
+            // FLUXO DO PIX ONLINE
+            if (pagamento === "pix") {
+                const emailCliente = email || `${fone.replace(/\D/g, "")}@cliente99burger.com`;
 
-            await enviarNotificacaoNovoPedido(
-                enderecoCompleto,
-                respostaPedido.data.id_pedido
-            );
+                const pixRes = await api.post("/pix/gerar", {
+                    id_pedido: 0,
+                    transaction_amount: vlTotalFinal,
+                    description: `Pedido 99Burger - ${nomeFormatado}`,
+                    payer: {
+                        email: emailCliente,
+                        first_name: nomeFormatado,
+                        cpf: cpf.replace(/\D/g, "")
+                    }
+                });
+
+                const paymentId = pixRes.data.mp_payment_id;
+
+                const payloadComMpId = { ...payload, mp_payment_id: paymentId };
+                const respostaPedido = await api.post("/pedidos/publico", payloadComMpId);
+                const idPed = respostaPedido.data.id_pedido;
+
+                await enviarNotificacaoNovoPedidoDireto(enderecoCompleto, idPed);
+
+                setPixQrCodeBase64(pixRes.data.mp_qr_code_base64);
+                setPixCopiaECola(pixRes.data.mp_qr_code);
+                setMpPaymentId(paymentId);
+                setPixGerado(true);
+                setEnviando(false);
+                return;
+            }
+
+            // FLUXO DE OUTROS PAGAMENTOS (Dinheiro / Cartão na entrega)
+            const respostaPedido = await api.post("/pedidos/publico", payload);
+            const idPed = respostaPedido.data.id_pedido;
+
+            await enviarNotificacaoNovoPedidoDireto(enderecoCompleto, idPed);
 
             setCartItems([]);
             setTotalCart(0);
             setShowSucesso(true);
         } catch (err) {
             alerta(err?.response?.data?.error || "Erro ao enviar pedido. Tente novamente.");
-        } finally {
             setEnviando(false);
+            setPedidoBloqueado(false);
         }
     }
+
+    const copiarChavePix = () => {
+        navigator.clipboard.writeText(pixCopiaECola);
+        setCopiado(true);
+        setTimeout(() => setCopiado(false), 2500);
+    };
 
     const STEPS = ["Dados", "Entrega", "Pagamento", "Revisão"];
     const totalPedido = totalCart + (tipoEntrega === "retirada" ? 0 : frete);
     const freteFixoAtivo = configFrete.taxaBase > 0;
 
-    // Para o stepper visual, quando é retirada a etapa "Entrega" é pulada,
-    // então tratamos o "step" 3 (Pagamento) como se fosse a posição 2 no indicador.
     const stepVisual = (tipoEntrega === "retirada" && step >= 3) ? step - 1 : step;
 
     return (
@@ -783,6 +858,26 @@ export function Checkout() {
                                 value={fone}
                                 onChange={e => setFone(e.target.value)}
                                 placeholder="(15) 99999-9999"
+                            />
+                        </div>
+
+                        <div className="input-group espacamento-top">
+                            <label>CPF <span className="opcional">(opcional - para identificação do Pix)</span></label>
+                            <input
+                                value={cpf}
+                                onChange={e => setCpf(formatarCPF(e.target.value))}
+                                placeholder="000.000.000-00"
+                                maxLength={14}
+                            />
+                        </div>
+
+                        <div className="input-group espacamento-top">
+                            <label>E-mail <span className="opcional">(opcional - para comprovante Pix)</span></label>
+                            <input
+                                type="email"
+                                value={email}
+                                onChange={e => setEmail(e.target.value)}
+                                placeholder="exemplo@email.com"
                             />
                         </div>
 
@@ -1142,15 +1237,11 @@ export function Checkout() {
                     <div className="box-checkout">
                         <h3 className="box-title">Pagamento</h3>
 
-                        <p className="campo-dica-erro" style={{ color: "inherit", marginBottom: 12 }}>
-                            Pagamento realizado {tipoEntrega === "retirada" ? "na retirada" : "na entrega"}. Ainda não aceitamos pagamento online.
-                        </p>
-
                         <div className="payment-selector">
                             {[
-                                { id: "pix", label: "PIX" },
-                                { id: "cartao", label: "Cartão" },
-                                { id: "dinheiro", label: "Dinheiro" }
+                                { id: "pix", label: "PIX Online" },
+                                { id: "cartao", label: "Cartão (Entrega)" },
+                                { id: "dinheiro", label: "Dinheiro (Entrega)" }
                             ].map(op => (
                                 <button
                                     key={op.id}
@@ -1161,6 +1252,12 @@ export function Checkout() {
                                 </button>
                             ))}
                         </div>
+
+                        {pagamento === "pix" && (
+                            <div className="pix-info espacamento-top">
+                                O QR Code Pix será gerado após você clicar em <strong>Revisar Pedido</strong> e confirmar no final.
+                            </div>
+                        )}
 
                         {pagamento === "cartao" && (
                             <div className="cartao-opcoes">
@@ -1209,70 +1306,115 @@ export function Checkout() {
                     <div className="box-checkout">
                         <h3 className="box-title">Revisão</h3>
 
-                        <div className="revisao-secao">
-                            <p><strong>{formatarNomeProprio(nome)}</strong> — {fone}</p>
-                            {tipoEntrega === "retirada" ? (
-                                <p><strong>Retirada no estabelecimento</strong></p>
-                            ) : (
-                                <>
-                                    <p>{endereco}, {numero} {complemento && `- ${complemento}`}</p>
-                                    <p>{bairro} - {cidade}/{uf}</p>
-                                </>
-                            )}
-                        </div>
+                        {!pixGerado ? (
+                            <>
+                                <div className="revisao-secao">
+                                    <p><strong>{formatarNomeProprio(nome)}</strong> — {fone}</p>
+                                    {tipoEntrega === "retirada" ? (
+                                        <p><strong>Retirada no estabelecimento</strong></p>
+                                    ) : (
+                                        <>
+                                            <p>{endereco}, {numero} {complemento && `- ${complemento}`}</p>
+                                            <p>{bairro} - {cidade}/{uf}</p>
+                                        </>
+                                    )}
+                                </div>
 
-                        <div className="revisao-secao">
-                            <p className="revisao-titulo">Itens</p>
+                                <div className="revisao-secao">
+                                    <p className="revisao-titulo">Itens</p>
 
-                            {cartItems.length === 0 ? (
-                                <p>Nenhum item na sacola.</p>
-                            ) : (
-                                cartItems.map((item, i) => {
-                                    const precoItem = Number(item.preco ?? item.valor ?? 0);
-                                    const qtdItem = Number(item.qtd ?? 1);
+                                    {cartItems.length === 0 ? (
+                                        <p>Nenhum item na sacola.</p>
+                                    ) : (
+                                        cartItems.map((item, i) => {
+                                            const precoItem = Number(item.preco ?? item.valor ?? 0);
+                                            const qtdItem = Number(item.qtd ?? 1);
 
-                                    return (
-                                        <div key={i} className="revisao-produto-item">
-                                            <div className="revisao-produto-linha">
-                                                <span>{qtdItem}x {item.nome}</span>
-                                                <span>{fmt(precoItem * qtdItem)}</span>
-                                            </div>
-                                        </div>
-                                    );
-                                })
-                            )}
-                        </div>
+                                            return (
+                                                <div key={i} className="revisao-produto-item">
+                                                    <div className="revisao-produto-linha">
+                                                        <span>{qtdItem}x {item.nome}</span>
+                                                        <span>{fmt(precoItem * qtdItem)}</span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                </div>
 
-                        <div className="valores-box">
-                            <div className="valor-linha">
-                                <span>Subtotal</span>
-                                <span>{fmt(totalCart)}</span>
+                                <div className="valores-box">
+                                    <div className="valor-linha">
+                                        <span>Subtotal</span>
+                                        <span>{fmt(totalCart)}</span>
+                                    </div>
+
+                                    <div className="valor-linha">
+                                        <span>Entrega</span>
+                                        <span>{tipoEntrega === "retirada" ? "Grátis (retirada)" : fmt(frete)}</span>
+                                    </div>
+
+                                    <div className="valor-linha total">
+                                        <span>Total</span>
+                                        <span>{fmt(totalPedido)}</span>
+                                    </div>
+                                </div>
+
+                                <div className="footer-buttons">
+                                    <button className="btn-back" onClick={navigateBack} disabled={enviando || pedidoBloqueado}>
+                                        Voltar
+                                    </button>
+
+                                    <button
+                                        className={`btn-checkout ${enviando ? "enviando" : ""}`}
+                                        onClick={finalizarPedido}
+                                        disabled={enviando || pedidoBloqueado}
+                                    >
+                                        {enviando ? (
+                                            <>
+                                                <span className="spinner"></span> Gerando Pedido...
+                                            </>
+                                        ) : (
+                                            pagamento === "pix" ? "Gerar Pix e Pagar" : "Finalizar Pedido"
+                                        )}
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="pix-box-container">
+                                <h4 className="pix-titulo">Aguardando Pagamento Pix</h4>
+                                <p className="pix-subtitulo">
+                                    Escaneie o QR Code ou copie o código abaixo para pagar no seu aplicativo do banco.
+                                </p>
+
+                                <div className="pix-qr-wrapper">
+                                    <img
+                                        src={`data:image/jpeg;base64,${pixQrCodeBase64}`}
+                                        alt="QR Code Pix"
+                                        className="pix-qr-img"
+                                    />
+                                </div>
+
+                                <div className="pix-copia-cola-wrapper">
+                                    <textarea
+                                        readOnly
+                                        value={pixCopiaECola}
+                                        className="pix-textarea"
+                                    />
+                                    <button
+                                        type="button"
+                                        className={`btn-checkout ${copiado ? "btn-copiado" : ""}`}
+                                        onClick={copiarChavePix}
+                                    >
+                                        {copiado ? "Copiado com Sucesso! ✓" : "Copiar Chave Pix"}
+                                    </button>
+                                </div>
+
+                                <div className="pix-status-loading">
+                                    <span className="spinner-pix"></span>
+                                    <span>Identificando pagamento automaticamente...</span>
+                                </div>
                             </div>
-
-                            <div className="valor-linha">
-                                <span>Entrega</span>
-                                <span>{tipoEntrega === "retirada" ? "Grátis (retirada)" : fmt(frete)}</span>
-                            </div>
-
-                            <div className="valor-linha total">
-                                <span>Total</span>
-                                <span>{fmt(totalPedido)}</span>
-                            </div>
-                        </div>
-
-                        <div className="footer-buttons">
-                            <button className="btn-back" onClick={navigateBack} disabled={enviando}>
-                                Voltar
-                            </button>
-
-                            <button
-                                className={`btn-checkout ${enviando ? "enviando" : ""}`}
-                                onClick={finalizarPedido}
-                                disabled={enviando}
-                            >
-                                {enviando ? "Enviando..." : "Finalizar Pedido"}
-                            </button>
-                        </div>
+                        )}
                     </div>
                 )}
             </div>

@@ -3,10 +3,11 @@
     align-items: center;
     background-color: #f3f3f3;
     border-radius: 12px;
-    padding: 10px 15px; /* Aumentei um pouco o padding interno */
+    padding: 10px 15px;
     border: 1px solid #e2e2e2;
     transition: all 0.3s ease;
-    margin-bottom: 100px;
+    /* ERA 100px! Reduzido para 10px para colar na barra de categorias */
+    margin-bottom: 10px !important; 
 }
 
 .busca-wrapper:focus-within {
@@ -39,9 +40,8 @@
     cursor: pointer;
 }
 
-/* Ajuste para telas pequenas */
 @media (max-width: 600px) {
     .busca-wrapper {
-        margin: 0 10px;
+        margin: 0 10px 10px 10px !important;
     }
 }

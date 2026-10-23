@@ -14,18 +14,20 @@ function ProdutoVitrine(props) {
 
     const { cartItems, AddItemCart, setShowCart } = useContext(CartContext);
 
-    const itemNoCarrinho = cartItems.find(item => item.id === props.id_produto);
-    const qtdExibir = itemNoCarrinho ? itemNoCarrinho.qtd : 0;
+    // Soma a quantidade total desse produto no carrinho (mesmo que com adicionais diferentes)
+    const qtdTotalNoCarrinho = cartItems
+        .filter(item => (item.id ?? item.id_produto) === props.id_produto)
+        .reduce((acc, item) => acc + Number(item.qtd || 1), 0);
+
     const fotoProduto = props.foto || "https://placehold.co/300x300?text=Sem+Foto";
-    const formatar = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+    const formatar = (v) =>
+        new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v || 0));
 
     // Lógica de estoque
     const temControleEstoque = props.estoque !== null && props.estoque !== undefined;
     const estoqueDisponivel = temControleEstoque ? Number(props.estoque) : null;
     const atingiuLimiteEstoque = temControleEstoque && qtd >= estoqueDisponivel;
 
-    // Efeito 1: Busca opções - ignorando o aviso de dependência pois 'qtd' não é usado aqui
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
         if (!aberto) return;
         setCarregando(true);
@@ -36,7 +38,6 @@ function ProdutoVitrine(props) {
             .finally(() => setCarregando(false));
     }, [aberto, props.id_produto]);
 
-    // Efeito 2: Valida estoque - 'qtd' adicionada como dependência
     useEffect(() => {
         if (aberto && temControleEstoque && estoqueDisponivel > 0 && qtd > estoqueDisponivel) {
             setQtd(estoqueDisponivel);
@@ -53,15 +54,15 @@ function ProdutoVitrine(props) {
             const copia = { ...prev };
             const atual = copia[item.id_item] || { ...item, qtd_item: 0, id_opcao };
             let novaQtd = atual.qtd_item + delta;
-            
+
             if (novaQtd < -1) novaQtd = -1;
-            
+
             const totalNoGrupo = Object.values(copia)
                 .filter(i => i.id_opcao === id_opcao && i.id_item !== item.id_item)
                 .reduce((acc, i) => acc + (i.qtd_item > 0 ? i.qtd_item : 0), 0);
-            
+
             if (delta > 0 && qtd_max && (totalNoGrupo + (novaQtd > 0 ? novaQtd : 0)) > qtd_max) return prev;
-            
+
             if (novaQtd === 0) {
                 delete copia[item.id_item];
             } else {
@@ -71,17 +72,20 @@ function ProdutoVitrine(props) {
         });
     };
 
-    const totalAdicionais = Object.values(selecionados).reduce((acc, i) => acc + (i.qtd_item > 0 ? i.vl_item * i.qtd_item : 0), 0);
-    const totalFinal = (props.preco + totalAdicionais) * qtd;
+    const totalAdicionais = Object.values(selecionados).reduce(
+        (acc, i) => acc + (i.qtd_item > 0 ? Number(i.vl_item || 0) * i.qtd_item : 0),
+        0
+    );
+    const totalFinal = (Number(props.preco || 0) + totalAdicionais) * qtd;
 
     const handleAdicionarModal = async () => {
         setCarregando(true);
-        
+
         try {
             const res = await fetch(`${API}/produtos/estoque/${props.id_produto}`);
             const dadosEstoque = await res.json();
-            
-            if (dadosEstoque.qtd < qtd) {
+
+            if (dadosEstoque.qtd !== undefined && dadosEstoque.qtd < qtd) {
                 alert(`Ops! O estoque mudou enquanto você escolhia. Só temos ${dadosEstoque.qtd} unidade(s) disponível(is).`);
                 setAberto(false);
                 setQtd(1);
@@ -114,12 +118,12 @@ function ProdutoVitrine(props) {
             };
 
             AddItemCart(novoProduto);
-            
+
             setQtd(1);
             setObs("");
             setSelecionados({});
             setAberto(false);
-            
+
             setTimeout(() => {
                 setShowCart(true);
             }, 300);
@@ -133,34 +137,62 @@ function ProdutoVitrine(props) {
 
     return (
         <>
-            <div className="produto-box" onClick={() => setAberto(true)}>
-                {qtdExibir > 0 && <div className="badge-qtd">{qtdExibir}</div>}
-                <div className="produto-img-container"><img src={fotoProduto} alt={props.nome} /></div>
-                <div className="produto-info">
-                    <h2 className="prod-vitrine-nome">{props.nome}</h2>
-                    <p className="prod-vitrine-descricao">{props.descricao}</p>
-                    <div className="prod-vitrine-preco">{formatar(props.preco)}</div>
+            <div className="produto-card-moderno" onClick={() => setAberto(true)}>
+                {qtdTotalNoCarrinho > 0 && (
+                    <div className="badge-qtd-card">{qtdTotalNoCarrinho}</div>
+                )}
+
+                <div className="produto-card-texto">
+                    <h3 className="produto-card-nome">{props.nome}</h3>
+                    {props.descricao && (
+                        <p className="produto-card-descricao">{props.descricao}</p>
+                    )}
+                    <div className="produto-card-rodape">
+                        <span className="produto-card-preco">{formatar(props.preco)}</span>
+                    </div>
                 </div>
-                <button className="btn-cart"><span>Adicionar</span></button>
+
+                <div className="produto-card-foto-wrapper">
+                    <img
+                        src={fotoProduto}
+                        alt={props.nome}
+                        loading="lazy"
+                        onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = "https://placehold.co/300x300?text=Sem+Foto";
+                        }}
+                    />
+                    <button type="button" className="btn-card-adicionar" aria-label="Adicionar produto">
+                        +
+                    </button>
+                </div>
             </div>
 
             {aberto && (
                 <div className="modal-overlay" onClick={() => setAberto(false)}>
                     <div className="modal-content" onClick={e => e.stopPropagation()}>
                         <div className="modal-header-img">
-                             <img src={fotoProduto} alt={props.nome} />
-                             <button className="btn-modal-close" onClick={() => setAberto(false)}>✕</button>
+                            <img src={fotoProduto} alt={props.nome} />
+                            <button className="btn-modal-close" onClick={() => setAberto(false)}>✕</button>
                         </div>
                         <div className="modal-body">
                             <h2 className="modal-title">{props.nome}</h2>
                             <div className="modal-price-tag">{formatar(props.preco)}</div>
-                            <p className="modal-desc-long">{props.descricao}</p>
+                            {props.descricao && <p className="modal-desc-long">{props.descricao}</p>}
+
                             <div className="modal-scroll-area">
-                                {carregando ? <div className="loading-txt">Carregando opcionais...</div> :
+                                {carregando ? (
+                                    <div className="loading-opcionais">Carregando opções...</div>
+                                ) : (
                                     opcoes.map(opt => (
                                         <div key={opt.id_opcao} className="grupo-opcionais">
-                                            <div className="grupo-titulo">{opt.descricao} {opt.qtd_max_escolha > 0 && <small>(Escolha até {opt.qtd_max_escolha})</small>}</div>
-                                            {opt.itens.map(item => {
+                                            <div className="grupo-titulo">
+                                                <span>{opt.descricao}</span>
+                                                {opt.qtd_max_escolha > 0 && (
+                                                    <small>Escolha até {opt.qtd_max_escolha}</small>
+                                                )}
+                                            </div>
+                                            {opt.itens && opt.itens.map(item => {
                                                 const q = selecionados[item.id_item]?.qtd_item || 0;
                                                 return (
                                                     <div key={item.id_item} className="item-linha">
@@ -173,29 +205,38 @@ function ProdutoVitrine(props) {
                                                             </span>
                                                         </div>
                                                         <div className="item-controles">
-                                                            {item.vl_item > 0 && q >= 0 && <span className="item-valor-adicional">+ {formatar(item.vl_item)}</span>}
+                                                            {Number(item.vl_item) > 0 && q >= 0 && (
+                                                                <span className="item-valor-adicional">+ {formatar(item.vl_item)}</span>
+                                                            )}
                                                             <div className="seletor-mini">
-                                                                <button onClick={() => alterarQtdItem(opt.id_opcao, item, -1, opt.qtd_max_escolha)}>-</button>
+                                                                <button type="button" onClick={() => alterarQtdItem(opt.id_opcao, item, -1, opt.qtd_max_escolha)}>-</button>
                                                                 <span className={q < 0 ? 'num-negativo' : ''}>{q}</span>
-                                                                <button onClick={() => alterarQtdItem(opt.id_opcao, item, 1, opt.qtd_max_escolha)}>+</button>
+                                                                <button type="button" onClick={() => alterarQtdItem(opt.id_opcao, item, 1, opt.qtd_max_escolha)}>+</button>
                                                             </div>
                                                         </div>
                                                     </div>
-                                                )
+                                                );
                                             })}
                                         </div>
                                     ))
-                                }
+                                )}
+
                                 <div className="obs-container">
-                                    <label>Observações</label>
-                                    <textarea placeholder="Ex: Tirar cebola, ponto da carne, etc..." value={obs} onChange={e => setObs(e.target.value)} />
+                                    <label>Observações do Pedido</label>
+                                    <textarea
+                                        placeholder="Ex: Ponto da carne bem passado, tirar cebola..."
+                                        value={obs}
+                                        onChange={e => setObs(e.target.value)}
+                                    />
                                 </div>
                             </div>
+
                             <div className="modal-footer-acoes">
                                 <div className="contador-produto-principal">
-                                    <button onClick={() => qtd > 1 && setQtd(qtd - 1)}>-</button>
+                                    <button type="button" onClick={() => qtd > 1 && setQtd(qtd - 1)}>-</button>
                                     <span>{qtd}</span>
                                     <button
+                                        type="button"
                                         onClick={incrementarQtd}
                                         disabled={atingiuLimiteEstoque}
                                         style={atingiuLimiteEstoque ? { opacity: 0.4, cursor: "not-allowed" } : undefined}
@@ -203,15 +244,13 @@ function ProdutoVitrine(props) {
                                         +
                                     </button>
                                 </div>
-                                {atingiuLimiteEstoque && (
-                                    <p className="aviso-estoque" style={{ color: "#c0392b", fontSize: 13, margin: "4px 0 0" }}>
-                                        {estoqueDisponivel === 1
-                                            ? "Só temos 1 em estoque"
-                                            : `Só temos ${estoqueDisponivel} em estoque`}
-                                    </p>
-                                )}
-                                <button className="btn-enviar-carrinho" onClick={handleAdicionarModal} disabled={carregando}>
-                                    {carregando ? "Validando..." : `ADICIONAR • ${formatar(totalFinal)}`}
+                                <button
+                                    type="button"
+                                    className="btn-enviar-carrinho"
+                                    onClick={handleAdicionarModal}
+                                    disabled={carregando}
+                                >
+                                    {carregando ? "Validando..." : `Adicionar • ${formatar(totalFinal)}`}
                                 </button>
                             </div>
                         </div>
@@ -221,4 +260,5 @@ function ProdutoVitrine(props) {
         </>
     );
 }
+
 export default ProdutoVitrine;

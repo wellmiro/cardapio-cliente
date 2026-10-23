@@ -1,33 +1,46 @@
 /* categoria-barra.css */
 
-.categoria-wrapper {
-    background-color: #ffffff;
-    width: 100%;
-    padding: 10px 0;
-    position: fixed;
-    top: 100px;
-    left: 0;
-    z-index: 9999;
-    border-bottom: 1px solid #f2f2f2;
-    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.05);
-    transition: top 0.2s ease-in-out;
+/* ESTADO NORMAL (NO TOPO DA PÁGINA): Fica natural logo abaixo da busca */
+.normal .categoria-wrapper {
+    position: relative !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    background-color: #ffffff !important;
+    border-bottom: 1px solid #f2f2f2 !important;
+    padding: 8px 0 !important;
+    z-index: 999 !important;
+    box-shadow: 0px 2px 8px rgba(0, 0, 0, 0.04) !important;
 }
 
+/* ESTADO FLUTUANTE (QUANDO VOCÊ ROLA A PÁGINA): Gruda no topo a 0px */
 .topo .categoria-wrapper {
+    position: fixed !important;
     top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    z-index: 9999 !important;
+    background-color: #ffffff !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+    box-shadow: 0px 4px 14px rgba(0, 0, 0, 0.09) !important;
+    padding: 6px 0 !important;
+    animation: slideDownBar 0.25s ease !important;
+}
+
+@keyframes slideDownBar {
+    from { transform: translateY(-100%); }
+    to { transform: translateY(0); }
 }
 
 .categoria-barra {
     display: flex;
     overflow-x: auto;
     gap: 15px;
-    padding: 15px 20px;
+    padding: 8px 20px;
     justify-content: flex-start;
     scrollbar-width: none;
-    border: 1px solid #f0f0f0;
-    border-radius: 15px;
-    margin: 0 15px;
-    background-color: #fff;
+    background-color: #ffffff;
+    margin: 0;
 }
 
 .categoria-barra::-webkit-scrollbar {
@@ -38,72 +51,55 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    min-width: 80px;
+    min-width: 68px;
     cursor: pointer;
+    transition: transform 0.15s ease;
+}
+
+.categoria-item:active {
+    transform: scale(0.92);
 }
 
 .categoria-item img {
-    width: 65px !important;
-    height: 65px !important;
+    width: 52px !important;
+    height: 52px !important;
     border-radius: 50% !important;
     object-fit: cover;
-    margin-bottom: 8px;
+    margin-bottom: 4px;
     border: 2px solid #fff;
-    box-shadow: 0px 3px 8px rgba(0, 0, 0, 0.15);
+    box-shadow: 0px 3px 8px rgba(0, 0, 0, 0.12);
 }
 
 .categoria-item span {
-    font-size: 13px;
-    font-weight: 600;
-    color: #333;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2d3748;
 }
 
-/* ===== SETAS ===== */
+/* SETAS */
 .seta {
     position: absolute;
     top: 50%;
     transform: translateY(-55%);
-    font-size: 50px;
-    color: #000;
-    z-index: 10000;
+    font-size: 38px;
+    color: #4a5568;
+    z-index: 1000;
     pointer-events: none;
-    line-height: 1;
 }
 
-.seta-esquerda { left: 5px; }
-.seta-direita  { right: 5px; }
+.seta-esquerda { left: 4px; }
+.seta-direita  { right: 4px; }
 
-/* ============================================================
-   MOBILE
-   ============================================================ */
-
+/* REGRAS MOBILE */
 @media (max-width: 900px) {
-    .categoria-wrapper {
-        top: 150px !important;
-        padding: 0 !important;
-        height: 75px !important;
-        display: flex;
-        align-items: center;
-        background-color: #fff;
-        border-bottom: 1px solid #eee;
-    }
-
     .categoria-barra {
-        margin: 0 !important;
-        padding: 0 35px !important;
-        border: none !important;
-        border-radius: 0 !important;
-        width: 100%;
-        height: 100%;
-        display: flex;
-        align-items: center;
-        gap: 12px;
+        padding: 6px 14px !important;
+        gap: 10px !important;
     }
 
     .categoria-item img {
-        width: 42px !important;
-        height: 42px !important;
-        margin-bottom: 2px !important;
+        width: 44px !important;
+        height: 44px !important;
     }
 
     .categoria-item span {

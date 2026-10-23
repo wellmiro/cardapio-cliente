@@ -152,6 +152,11 @@ export function Checkout() {
     const [showSucesso, setShowSucesso] = useState(false);
     const [enviando, setEnviando] = useState(false);
     const [pedidoBloqueado, setPedidoBloqueado] = useState(false);
+
+    // Trava SÍNCRONA contra duplo clique
+    const envioEmAndamentoRef = useRef(false);
+    // Chave de idempotência
+    const idempotencyKeyRef = useRef(null);
     const [step, setStep] = useState(1);
 
     const [configFrete, setConfigFrete] = useState({
@@ -671,7 +676,7 @@ export function Checkout() {
     }
 
     async function finalizarPedido() {
-        if (enviando || pedidoBloqueado) return;
+        if (envioEmAndamentoRef.current || enviando || pedidoBloqueado) return;
 
         if (!cartItems || cartItems.length === 0 || totalCart <= 0) {
             alerta("Sua sacola está vazia. Adicione pelo menos um item antes de finalizar.");
@@ -686,8 +691,13 @@ export function Checkout() {
             return;
         }
 
+        envioEmAndamentoRef.current = true;
         setEnviando(true);
         setPedidoBloqueado(true);
+
+        if (!idempotencyKeyRef.current) {
+            idempotencyKeyRef.current = crypto.randomUUID();
+        }
 
         try {
             let forma_pagamento = pagamento === "pix" ? "PIX (Online)" : pagamento;
@@ -718,7 +728,7 @@ export function Checkout() {
                     qtd: qtdItem,
                     vl_unitario: precoItem,
                     vl_total: precoItem * qtdItem,
-                    obs: i.observacao,
+                    observacao: i.observacao,
                     adicionais: i.adicionais || []
                 };
             });
@@ -729,6 +739,7 @@ export function Checkout() {
             const payload = {
                 slug: slugAtual,
                 session_id,
+                idempotency_key: idempotencyKeyRef.current,
                 nome_cliente: nomeFormatado,
                 fone_cliente: fone,
                 vl_subtotal: totalCart,
@@ -745,12 +756,14 @@ export function Checkout() {
                 itens: itensPedido
             };
 
-            // FLUXO DO PIX ONLINE
+            // FLUXO DO PIX ONLINE (Agora envia slug e id_estabelecimento dinâmicos)
             if (pagamento === "pix") {
                 const emailCliente = email || `${fone.replace(/\D/g, "")}@cliente99burger.com`;
 
                 const pixRes = await api.post("/pix/gerar", {
                     id_pedido: 0,
+                    slug: slugAtual,
+                    id_estabelecimento: idEstabelecimento,
                     transaction_amount: vlTotalFinal,
                     description: `Pedido 99Burger - ${nomeFormatado}`,
                     payer: {
@@ -787,6 +800,10 @@ export function Checkout() {
             setShowSucesso(true);
         } catch (err) {
             alerta(err?.response?.data?.error || "Erro ao enviar pedido. Tente novamente.");
+            if (err?.response) {
+                idempotencyKeyRef.current = null;
+            }
+            envioEmAndamentoRef.current = false;
             setEnviando(false);
             setPedidoBloqueado(false);
         }

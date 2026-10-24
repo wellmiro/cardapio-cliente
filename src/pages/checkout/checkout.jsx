@@ -215,6 +215,10 @@ export function Checkout() {
     const [mpPaymentId, setMpPaymentId] = useState(null);
     const [copiado, setCopiado] = useState(false);
 
+    // Notificação do Pix fica GUARDADA aqui e só é enviada depois que o pagamento for aprovado
+    const notificacaoPixRef = useRef(null);
+    const pixConfirmadoRef = useRef(false);
+
     const mapaPreviewRef = useRef(null);
     const mapaDetalhesRef = useRef(null);
 
@@ -284,7 +288,21 @@ export function Checkout() {
                     const res = await api.get(`/pix/status/${mpPaymentId}`);
                     if (res.data.pago || res.data.status === "approved") {
                         clearInterval(interval);
-                        
+
+                        // evita rodar duas vezes se duas consultas voltarem juntas
+                        if (pixConfirmadoRef.current) return;
+                        pixConfirmadoRef.current = true;
+
+                        // AGORA sim (Pix pago): dispara a notificação pro Delphi
+                        if (notificacaoPixRef.current) {
+                            try {
+                                await api.post("/notificacoes/publico", notificacaoPixRef.current);
+                            } catch (errNotif) {
+                                console.error("Erro ao enviar notificação do Pix:", errNotif.response?.data || errNotif);
+                            }
+                            notificacaoPixRef.current = null;
+                        }
+
                         setCartItems([]);
                         setTotalCart(0);
                         setShowSucesso(true);
@@ -628,47 +646,53 @@ export function Checkout() {
         setStep(s => Math.max(s - 1, 1));
     };
 
+    // Monta o payload da notificação (sem enviar)
+    function montarPayloadNotificacao(enderecoCompleto, idPedido) {
+        let formaPagamentoTexto = "PIX";
+
+        if (pagamento === "cartao") {
+            formaPagamentoTexto = `Cartao (${tipoCartao === "credito" ? "Credito" : "Debito"})`;
+        } else if (pagamento === "dinheiro") {
+            formaPagamentoTexto = "Dinheiro";
+        }
+
+        const nomeFormatado = formatarNomeProprio(nome);
+
+        const itensResumo = cartItems
+            .map(item => {
+                const qtd = Number(item.qtd ?? 1);
+                return `${qtd}x ${item.nome}`;
+            })
+            .join("\n");
+
+        const linhaEndereco = tipoEntrega === "retirada"
+            ? "RETIRADA NO LOCAL"
+            : `Endereco:\n${enderecoCompleto}`;
+
+        const vlEntregaNotif = tipoEntrega === "retirada" ? 0 : frete;
+
+        const mensagem =
+            `NOVO PEDIDO #${idPedido}\n\n` +
+            `Cliente: ${nomeFormatado}\n` +
+            `WhatsApp: ${fone}\n\n` +
+            `Itens:\n${itensResumo}\n\n` +
+            `Total: ${fmt(totalCart + vlEntregaNotif)}\n` +
+            `Pagamento: ${formaPagamentoTexto}\n\n` +
+            `${linhaEndereco}`;
+
+        return {
+            id_estabelecimento: idEstabelecimento,
+            mensagem,
+            id_pedido: idPedido,
+            id_produto: null
+        };
+    }
+
+    // Envia na hora (usado só por Dinheiro / Cartão na entrega)
     async function enviarNotificacaoNovoPedidoDireto(enderecoCompleto, idPedido) {
         try {
-            let formaPagamentoTexto = "PIX";
-
-            if (pagamento === "cartao") {
-                formaPagamentoTexto = `Cartao (${tipoCartao === "credito" ? "Credito" : "Debito"})`;
-            } else if (pagamento === "dinheiro") {
-                formaPagamentoTexto = "Dinheiro";
-            }
-
-            const nomeFormatado = formatarNomeProprio(nome);
-
-            const itensResumo = cartItems
-                .map(item => {
-                    const qtd = Number(item.qtd ?? 1);
-                    return `${qtd}x ${item.nome}`;
-                })
-                .join("\n");
-
-            const linhaEndereco = tipoEntrega === "retirada"
-                ? "RETIRADA NO LOCAL"
-                : `Endereco:\n${enderecoCompleto}`;
-
-            const mensagem =
-                `NOVO PEDIDO #${idPedido}\n\n` +
-                `Cliente: ${nomeFormatado}\n` +
-                `WhatsApp: ${fone}\n\n` +
-                `Itens:\n${itensResumo}\n\n` +
-                `Total: ${fmt(totalCart + frete)}\n` +
-                `Pagamento: ${formaPagamentoTexto}\n\n` +
-                `${linhaEndereco}`;
-
-            const payload = {
-                id_estabelecimento: idEstabelecimento,
-                mensagem,
-                id_pedido: idPedido,
-                id_produto: null
-            };
-
+            const payload = montarPayloadNotificacao(enderecoCompleto, idPedido);
             await api.post("/notificacoes/publico", payload);
-
         } catch (err) {
             console.error("=== ERRO AO ENVIAR NOTIFICACAO ===");
             console.error(err.response?.data || err);
@@ -779,7 +803,9 @@ export function Checkout() {
                 const respostaPedido = await api.post("/pedidos/publico", payloadComMpId);
                 const idPed = respostaPedido.data.id_pedido;
 
-                await enviarNotificacaoNovoPedidoDireto(enderecoCompleto, idPed);
+                // NÃO notifica agora: só guarda. O envio acontece quando o Pix for aprovado.
+                pixConfirmadoRef.current = false;
+                notificacaoPixRef.current = montarPayloadNotificacao(enderecoCompleto, idPed);
 
                 setPixQrCodeBase64(pixRes.data.mp_qr_code_base64);
                 setPixCopiaECola(pixRes.data.mp_qr_code);

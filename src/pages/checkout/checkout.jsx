@@ -1,4 +1,4 @@
-import { useEffect, useState, useContext, useRef } from "react";
+import { useEffect, useState, useContext, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../../components/navbar/navbar.jsx";
 import api from "../../services/api.js";
@@ -112,6 +112,41 @@ function formatarCPF(v) {
     if (nums.length <= 6) return `${nums.slice(0, 3)}.${nums.slice(3)}`;
     if (nums.length <= 9) return `${nums.slice(0, 3)}.${nums.slice(3, 6)}.${nums.slice(6)}`;
     return `${nums.slice(0, 3)}.${nums.slice(3, 6)}.${nums.slice(6, 9)}-${nums.slice(9)}`;
+}
+
+// ===== Pix pendente (sobrevive a reload / aba descartada pelo navegador do celular) =====
+const PIX_PENDENTE_KEY = "pix_pendente";
+const PIX_PENDENTE_TTL_MS = 60 * 60 * 1000; // 1 hora
+
+function salvarPixPendente(dados) {
+    try {
+        localStorage.setItem(PIX_PENDENTE_KEY, JSON.stringify({ ...dados, criadoEm: Date.now() }));
+    } catch (e) {
+        console.error("Não foi possível salvar o Pix pendente:", e);
+    }
+}
+
+function lerPixPendente() {
+    try {
+        const bruto = localStorage.getItem(PIX_PENDENTE_KEY);
+        if (!bruto) return null;
+
+        const dados = JSON.parse(bruto);
+        if (!dados?.mpPaymentId || Date.now() - (dados.criadoEm || 0) > PIX_PENDENTE_TTL_MS) {
+            localStorage.removeItem(PIX_PENDENTE_KEY);
+            return null;
+        }
+        return dados;
+    } catch (e) {
+        localStorage.removeItem(PIX_PENDENTE_KEY);
+        return null;
+    }
+}
+
+function limparPixPendente() {
+    try {
+        localStorage.removeItem(PIX_PENDENTE_KEY);
+    } catch (e) { /* ignora */ }
 }
 
 function MapRefresher({ center }) {
@@ -278,45 +313,129 @@ export function Checkout() {
         carregarConfiguracoesLoja();
     }, []);
 
-    // Monitoring do status do Pix a cada 3 segundos
+    // Refs de apoio ao monitoramento do Pix
+    const verificandoDesdeRef = useRef(0);
+    const ultimoRetornoRef = useRef(0);
+    const redirectTimerRef = useRef(null);
+
+    // Restaura um Pix pendente se a página foi recarregada / descartada no celular
     useEffect(() => {
-        let interval = null;
+        const pendente = lerPixPendente();
+        if (!pendente) return;
 
-        if (pixGerado && mpPaymentId) {
-            interval = setInterval(async () => {
-                try {
-                    const res = await api.get(`/pix/status/${mpPaymentId}`);
-                    if (res.data.pago || res.data.status === "approved") {
-                        clearInterval(interval);
+        const slugAtual = localStorage.getItem("slug");
+        if (pendente.slug && slugAtual && pendente.slug !== slugAtual) return;
 
-                        // evita rodar duas vezes se duas consultas voltarem juntas
-                        if (pixConfirmadoRef.current) return;
-                        pixConfirmadoRef.current = true;
+        pixConfirmadoRef.current = false;
+        notificacaoPixRef.current = pendente.notificacao || null;
+        envioEmAndamentoRef.current = true;
 
-                        // AGORA sim (Pix pago): dispara a notificação pro Delphi
-                        if (notificacaoPixRef.current) {
-                            try {
-                                await api.post("/notificacoes/publico", notificacaoPixRef.current);
-                            } catch (errNotif) {
-                                console.error("Erro ao enviar notificação do Pix:", errNotif.response?.data || errNotif);
-                            }
-                            notificacaoPixRef.current = null;
-                        }
+        setPagamento("pix");
+        setPixQrCodeBase64(pendente.qrBase64 || "");
+        setPixCopiaECola(pendente.copiaECola || "");
+        setMpPaymentId(pendente.mpPaymentId);
+        setPedidoBloqueado(true);
+        setPixGerado(true);
+        setStep(4);
+    }, []);
 
-                        setCartItems([]);
-                        setTotalCart(0);
-                        setShowSucesso(true);
-                    }
-                } catch (err) {
-                    console.error("Erro ao verificar status do Pix:", err);
-                }
-            }, 3000);
+    // Limpa o timer de redirecionamento ao sair da tela
+    useEffect(() => {
+        return () => {
+            if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
+        };
+    }, []);
+
+    // Pix aprovado: notifica (uma única vez), limpa sacola e leva pro histórico
+    const finalizarPixAprovado = useCallback(async () => {
+        // trava síncrona: várias verificações podem voltar juntas
+        if (pixConfirmadoRef.current) return;
+        pixConfirmadoRef.current = true;
+
+        // O servidor já cria a notificação ao confirmar o Pix; aqui é só reforço.
+        // A rota /notificacoes/publico ignora duplicadas.
+        if (notificacaoPixRef.current) {
+            try {
+                await api.post("/notificacoes/publico", notificacaoPixRef.current);
+            } catch (errNotif) {
+                console.error("Erro ao enviar notificação do Pix:", errNotif.response?.data || errNotif);
+            }
+            notificacaoPixRef.current = null;
         }
 
-        return () => {
-            if (interval) clearInterval(interval);
+        limparPixPendente();
+        setCartItems([]);
+        setTotalCart(0);
+        setShowSucesso(true);
+
+        if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
+        redirectTimerRef.current = setTimeout(() => {
+            navigate("/historico", { replace: true });
+        }, 2500);
+    }, [navigate, setCartItems, setTotalCart]);
+
+    // Consulta o status do Pix. force=true ignora a trava de "consulta em andamento"
+    // (no celular uma requisição pode ficar pendurada quando o navegador vai pra segundo plano).
+    const verificarPix = useCallback(async (force = false) => {
+        if (!mpPaymentId || pixConfirmadoRef.current) return;
+
+        const agora = Date.now();
+        if (!force && agora - verificandoDesdeRef.current < 4000) return;
+        verificandoDesdeRef.current = agora;
+
+        try {
+            const res = await api.get(`/pix/status/${mpPaymentId}`, {
+                timeout: 10000,
+                params: { _t: agora }
+            });
+
+            if (res.data?.pago || res.data?.status === "approved") {
+                await finalizarPixAprovado();
+            }
+        } catch (err) {
+            console.error("Erro ao verificar status do Pix:", err);
+        } finally {
+            verificandoDesdeRef.current = 0;
+        }
+    }, [mpPaymentId, finalizarPixAprovado]);
+
+    // Polling a cada 3s + verificação imediata quando o cliente volta do app do banco
+    useEffect(() => {
+        if (!pixGerado || !mpPaymentId) return;
+
+        const timers = [];
+
+        verificarPix(true);
+        const interval = setInterval(() => verificarPix(false), 3000);
+
+        const aoVoltar = () => {
+            if (document.visibilityState === "hidden") return;
+
+            // visibilitychange + focus + pageshow costumam disparar juntos
+            const agora = Date.now();
+            if (agora - ultimoRetornoRef.current < 800) return;
+            ultimoRetornoRef.current = agora;
+
+            verificarPix(true);
+            // a rede do celular pode demorar a voltar: reforça algumas tentativas
+            timers.push(setTimeout(() => verificarPix(true), 1500));
+            timers.push(setTimeout(() => verificarPix(true), 4000));
         };
-    }, [pixGerado, mpPaymentId, setCartItems, setTotalCart]);
+
+        document.addEventListener("visibilitychange", aoVoltar);
+        window.addEventListener("focus", aoVoltar);
+        window.addEventListener("pageshow", aoVoltar);
+        window.addEventListener("online", aoVoltar);
+
+        return () => {
+            clearInterval(interval);
+            timers.forEach(clearTimeout);
+            document.removeEventListener("visibilitychange", aoVoltar);
+            window.removeEventListener("focus", aoVoltar);
+            window.removeEventListener("pageshow", aoVoltar);
+            window.removeEventListener("online", aoVoltar);
+        };
+    }, [pixGerado, mpPaymentId, verificarPix]);
 
     const alerta = (msg, tipo = "erro") => {
         setMsgAlert(msg);
@@ -810,6 +929,16 @@ export function Checkout() {
                 setPixQrCodeBase64(pixRes.data.mp_qr_code_base64);
                 setPixCopiaECola(pixRes.data.mp_qr_code);
                 setMpPaymentId(paymentId);
+
+                salvarPixPendente({
+                    mpPaymentId: paymentId,
+                    idPedido: idPed,
+                    slug: slugAtual,
+                    qrBase64: pixRes.data.mp_qr_code_base64,
+                    copiaECola: pixRes.data.mp_qr_code,
+                    notificacao: notificacaoPixRef.current
+                });
+
                 setPixGerado(true);
                 setEnviando(false);
                 return;
@@ -834,6 +963,11 @@ export function Checkout() {
             setPedidoBloqueado(false);
         }
     }
+
+    const irParaHistorico = () => {
+        if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
+        navigate("/historico", { replace: true });
+    };
 
     const copiarChavePix = () => {
         navigator.clipboard.writeText(pixCopiaECola);
@@ -860,7 +994,7 @@ export function Checkout() {
             )}
 
             {showSucesso && (
-                <ModalSucesso onClose={() => navigate("/historico")} />
+                <ModalSucesso onClose={irParaHistorico} />
             )}
 
             <div className="checkout-wrapper">
@@ -1456,6 +1590,15 @@ export function Checkout() {
                                     <span className="spinner-pix"></span>
                                     <span>Identificando pagamento automaticamente...</span>
                                 </div>
+
+                                <button
+                                    type="button"
+                                    className="btn-back"
+                                    style={{ marginTop: 12 }}
+                                    onClick={() => verificarPix(true)}
+                                >
+                                    Já paguei, verificar agora
+                                </button>
                             </div>
                         )}
                     </div>

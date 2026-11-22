@@ -215,16 +215,21 @@ function linkWhatsApp(tel, mensagem) {
 
 function MapRefresher({ center }) {
     const map = useMap();
+    const jaIniciouRef = useRef(false);
 
     useEffect(() => {
         if (!center) return;
 
-        map.setView(center, 16);
+        const zoomAtual = jaIniciouRef.current ? map.getZoom() : 16;
+        jaIniciouRef.current = true;
+
+        map.setView(center, zoomAtual);
         setTimeout(() => map.invalidateSize(), 300);
     }, [center, map]);
 
     return null;
 }
+
 
 function ModalSucesso({ onClose }) {
     return (

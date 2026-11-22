@@ -4,12 +4,33 @@ import "./historico.css";
 import api from "../../services/api.js";
 import { useNavigate } from "react-router-dom";
 
+// ===== Entregador (motoboy) — telefone e WhatsApp =====
+function telefoneComDDI(tel) {
+    let d = String(tel || "").replace(/\D/g, "").replace(/^0+/, "");
+    if (!d) return "";
+    if (!(d.startsWith("55") && d.length >= 12)) d = "55" + d;
+    return d;
+}
+
+function formatarTelefone(tel) {
+    let d = String(tel || "").replace(/\D/g, "");
+    if (d.startsWith("55") && d.length > 11) d = d.slice(2);
+    if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+    if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+    return String(tel || "");
+}
+
+function linkWhatsApp(tel, mensagem) {
+    return `https://wa.me/${telefoneComDDI(tel)}?text=${encodeURIComponent(mensagem)}`;
+}
+
 function Historico() {
     const [pedidos, setPedidos] = useState([]);
     const [idExpandido, setIdExpandido] = useState(null);
     const [detalhes, setDetalhes] = useState(null);
     const [loadingDetalhes, setLoadingDetalhes] = useState(false);
     const [loadingLista, setLoadingLista] = useState(true);
+    const [motoboy, setMotoboy] = useState(null); // { primeiro_nome, telefone } do entregador online
 
     const slug = localStorage.getItem("slug");
     const sessionId = localStorage.getItem("session_id");
@@ -72,15 +93,27 @@ function Historico() {
             }
         }
 
+        async function buscarMotoboy() {
+            try {
+                const resp = await api.get(`/cardapio_digital/${slug}/motoboy-ativo`);
+                if (!ativo) return;
+                const d = resp.data || {};
+                setMotoboy(d.online && d.telefone ? d : null);
+            } catch (err) {
+                if (ativo) setMotoboy(null);
+            }
+        }
+
         async function atualizar() {
             if (document.hidden) return; // aba em segundo plano: não gasta requisição
-            await Promise.all([buscarLista(), buscarDetalhesAbertos()]);
+            await Promise.all([buscarLista(), buscarDetalhesAbertos(), buscarMotoboy()]);
         }
 
         // primeira carga (com skeleton)
         buscarLista().finally(() => {
             if (ativo) setLoadingLista(false);
         });
+        buscarMotoboy();
 
         const intervalo = setInterval(atualizar, INTERVALO_ATUALIZACAO_MS);
         // ao voltar pra aba, atualiza na hora
@@ -124,6 +157,15 @@ function Historico() {
             style: "currency",
             currency: "BRL"
         }).format(v || 0);
+
+    // Pedido de entrega ainda em andamento? (o telefone mostrado é o do motoboy online agora,
+    // então só faz sentido enquanto o pedido não foi concluído/cancelado)
+    const mostrarMotoboy = (d) => {
+        if (!motoboy || !d) return false;
+        if (!["A", "P", "E"].includes(d.status)) return false;
+        if (d.tipo_entrega) return String(d.tipo_entrega).toLowerCase() === "entrega";
+        return !!d.endereco_entrega || Number(d.vl_entrega) > 0;
+    };
 
     const formatQtd = (qtd) => {
         const numero = parseInt(qtd);
@@ -220,6 +262,26 @@ function Historico() {
                                                             );
                                                         })}
                                                     </div>
+                                                )}
+
+                                                {mostrarMotoboy(detalhes) && (
+                                                    <a
+                                                        className="hist-motoboy"
+                                                        href={linkWhatsApp(
+                                                            motoboy.telefone,
+                                                            `Olá, ${motoboy.primeiro_nome}! Sou cliente do pedido #${p.id_pedido} e gostaria de falar sobre a entrega.`
+                                                        )}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                    >
+                                                        <span className="hist-motoboy-icone">🛵</span>
+                                                        <span className="hist-motoboy-info">
+                                                            <span className="hist-motoboy-label">Seu entregador</span>
+                                                            <strong>{motoboy.primeiro_nome}</strong>
+                                                            <span className="hist-motoboy-fone">{formatarTelefone(motoboy.telefone)}</span>
+                                                        </span>
+                                                        <span className="hist-motoboy-btn">💬 WhatsApp</span>
+                                                    </a>
                                                 )}
 
                                                 <div className="itens-lista">

@@ -193,6 +193,26 @@ function limparPixPendente() {
     } catch (e) { /* ignora */ }
 }
 
+// ===== Entregador (motoboy) — telefone e WhatsApp =====
+function telefoneComDDI(tel) {
+    let d = String(tel || "").replace(/\D/g, "").replace(/^0+/, "");
+    if (!d) return "";
+    if (!(d.startsWith("55") && d.length >= 12)) d = "55" + d;
+    return d;
+}
+
+function formatarTelefone(tel) {
+    let d = String(tel || "").replace(/\D/g, "");
+    if (d.startsWith("55") && d.length > 11) d = d.slice(2);
+    if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+    if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+    return String(tel || "");
+}
+
+function linkWhatsApp(tel, mensagem) {
+    return `https://wa.me/${telefoneComDDI(tel)}?text=${encodeURIComponent(mensagem)}`;
+}
+
 function MapRefresher({ center }) {
     const map = useMap();
 
@@ -306,6 +326,30 @@ export function Checkout() {
 
     const mapaPreviewRef = useRef(null);
     const mapaDetalhesRef = useRef(null);
+
+    // Entregador (motoboy) online — exibido na revisão do pedido de entrega
+    const [motoboy, setMotoboy] = useState(null); // { primeiro_nome, telefone }
+
+    useEffect(() => {
+        if (step !== 4 || tipoEntrega !== "entrega") return;
+
+        const slugAtual = localStorage.getItem("slug");
+        if (!slugAtual) return;
+
+        let ativo = true;
+
+        api.get(`/cardapio_digital/${slugAtual}/motoboy-ativo`)
+            .then(res => {
+                if (!ativo) return;
+                const d = res.data || {};
+                setMotoboy(d.online && d.telefone ? d : null);
+            })
+            .catch(() => {
+                if (ativo) setMotoboy(null);
+            });
+
+        return () => { ativo = false; };
+    }, [step, tipoEntrega]);
 
     useEffect(() => {
         async function carregarConfiguracoesLoja() {
@@ -1718,6 +1762,30 @@ export function Checkout() {
                                         <span>{fmt(totalPedido)}</span>
                                     </div>
                                 </div>
+
+                                {tipoEntrega === "entrega" && motoboy && (
+                                    <div className="checkout-motoboy">
+                                        <div className="checkout-motoboy-info">
+                                            <span className="checkout-motoboy-icone">🛵</span>
+                                            <div>
+                                                <span className="checkout-motoboy-label">Seu entregador</span>
+                                                <strong className="checkout-motoboy-nome">{motoboy.primeiro_nome}</strong>
+                                                <span className="checkout-motoboy-fone">{formatarTelefone(motoboy.telefone)}</span>
+                                            </div>
+                                        </div>
+                                        <a
+                                            className="checkout-motoboy-btn"
+                                            href={linkWhatsApp(
+                                                motoboy.telefone,
+                                                `Olá, ${motoboy.primeiro_nome}! Sou ${formatarNomeProprio(nome).split(" ")[0] || "cliente"} e estou fazendo um pedido de entrega pelo cardápio digital.`
+                                            )}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                        >
+                                            WhatsApp
+                                        </a>
+                                    </div>
+                                )}
 
                                 <div className="footer-buttons">
                                     <button className="btn-back" onClick={navigateBack} disabled={enviando || pedidoBloqueado}>

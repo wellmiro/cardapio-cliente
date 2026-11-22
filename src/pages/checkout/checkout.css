@@ -611,3 +611,14 @@
 .revisao-grupo { margin-bottom: 6px; }
 .revisao-grupo-titulo { display: block; font-size: 0.68rem; font-weight: 800; color: #E84F3D; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 2px; }
 .revisao-adicional-linha { display: flex; justify-content: space-between; font-size: 0.82rem; font-weight: 600; color: #666; padding: 1px 0; }
+
+/* ===== ENTREGADOR (MOTOBOY) NA REVISÃO ===== */
+.checkout-motoboy { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: #f0fff4; border: 1.5px solid #c6f6d5; border-radius: 12px; padding: 12px 14px; margin-top: 12px; }
+.checkout-motoboy-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.checkout-motoboy-info > div { display: flex; flex-direction: column; min-width: 0; }
+.checkout-motoboy-icone { font-size: 1.5rem; line-height: 1; }
+.checkout-motoboy-label { font-size: 0.68rem; font-weight: 800; color: #2e7d32; text-transform: uppercase; letter-spacing: 0.4px; }
+.checkout-motoboy-nome { font-size: 0.95rem; font-weight: 800; color: #222; }
+.checkout-motoboy-fone { font-size: 0.82rem; font-weight: 600; color: #555; }
+.checkout-motoboy-btn { flex-shrink: 0; background: #25D366; color: #fff; font-weight: 700; font-size: 0.82rem; padding: 9px 14px; border-radius: 10px; text-decoration: none; transition: background 0.2s; }
+.checkout-motoboy-btn:hover { background: #1ebe5b; }

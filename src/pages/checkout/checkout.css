@@ -605,3 +605,9 @@
     .box-checkout { padding: 18px 14px; }
     .loc-opcao { padding: 12px; }
 }
+
+/* ===== ADICIONAIS NA REVISÃO ===== */
+.revisao-adicionais-lista { margin: 6px 0 2px 10px; padding-left: 10px; border-left: 2px solid #f0d6d3; }
+.revisao-grupo { margin-bottom: 6px; }
+.revisao-grupo-titulo { display: block; font-size: 0.68rem; font-weight: 800; color: #E84F3D; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 2px; }
+.revisao-adicional-linha { display: flex; justify-content: space-between; font-size: 0.82rem; font-weight: 600; color: #666; padding: 1px 0; }

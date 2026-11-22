@@ -48,13 +48,26 @@ function ProdutoVitrine(props) {
         setQtd(q => q + 1);
     };
 
-    const alterarQtdItem = (id_opcao, item, delta, qtd_max) => {
+    const ehObrigatorio = (opt) => String(opt.ind_obrigatorio || "").toUpperCase() === "S";
+
+    // Quantas unidades já foram escolhidas num grupo (ignora os "SEM")
+    const qtdEscolhidaNoGrupo = (id_opcao) =>
+        Object.values(selecionados)
+            .filter(i => i.id_opcao === id_opcao && i.qtd_item > 0)
+            .reduce((acc, i) => acc + i.qtd_item, 0);
+
+    const alterarQtdItem = (opt, item, delta) => {
+        const id_opcao = opt.id_opcao;
+        const qtd_max = opt.qtd_max_escolha;
+        const obrigatorio = ehObrigatorio(opt);
         setSelecionados(prev => {
             const copia = { ...prev };
-            const atual = copia[item.id_item] || { ...item, qtd_item: 0, id_opcao };
+            const atual = copia[item.id_item] || { ...item, qtd_item: 0, id_opcao, descricao_opcao: opt.descricao, ind_obrigatorio: opt.ind_obrigatorio };
             let novaQtd = atual.qtd_item + delta;
             
             if (novaQtd < -1) novaQtd = -1;
+            // Em grupo obrigatório não faz sentido "tirar" o item (SEM)
+            if (obrigatorio && novaQtd < 0) novaQtd = 0;
             
             const totalNoGrupo = Object.values(copia)
                 .filter(i => i.id_opcao === id_opcao && i.id_item !== item.id_item)
@@ -75,6 +88,28 @@ function ProdutoVitrine(props) {
     const totalFinal = (props.preco + totalAdicionais) * qtd;
 
     const handleAdicionarModal = async () => {
+        // Regra dos grupos obrigatórios (mesma do app Delphi)
+        for (const opt of opcoes) {
+            if (!ehObrigatorio(opt)) continue;
+            const exigido = Number(opt.qtd_max_escolha) > 0 ? Number(opt.qtd_max_escolha) : 1;
+            const escolhido = qtdEscolhidaNoGrupo(opt.id_opcao);
+            if (escolhido < exigido) {
+                const faltam = exigido - escolhido;
+                let msg;
+                if (escolhido === 0) {
+                    msg = exigido === 1
+                        ? `Por favor, selecione 1 opção em "${opt.descricao}" para continuar!`
+                        : `Por favor, selecione ${exigido} opções em "${opt.descricao}" para continuar!`;
+                } else {
+                    msg = faltam === 1
+                        ? `Falta escolher mais 1 opção em "${opt.descricao}"!`
+                        : `Faltam escolher mais ${faltam} opções em "${opt.descricao}"!`;
+                }
+                alert(msg);
+                return;
+            }
+        }
+
         setCarregando(true);
         
         try {
@@ -107,6 +142,8 @@ function ProdutoVitrine(props) {
                 foto: fotoProduto,
                 qtd: Number(qtd),
                 observacao: obsFinal,
+                obs_cliente: obs.trim(),
+                removidos: todos.filter(i => i.qtd_item === -1).map(i => i.nome_item),
                 adicionais: todos.filter(i => i.qtd_item > 0).map(i => ({
                     ...i,
                     nome_formatado: i.qtd_item > 1 ? `${i.qtd_item}x ${i.nome_item}` : i.nome_item
@@ -167,7 +204,14 @@ function ProdutoVitrine(props) {
                                 {carregando ? <div className="loading-txt">Carregando opcionais...</div> :
                                     opcoes.map(opt => (
                                         <div key={opt.id_opcao} className="grupo-opcionais">
-                                            <div className="grupo-titulo">{opt.descricao} {opt.qtd_max_escolha > 0 && <small>(Escolha até {opt.qtd_max_escolha})</small>}</div>
+                                            <div className="grupo-titulo">
+                                                <span>{opt.descricao} {opt.qtd_max_escolha > 0 && <small>({ehObrigatorio(opt) ? `Escolha ${opt.qtd_max_escolha}` : `Escolha até ${opt.qtd_max_escolha}`})</small>}</span>
+                                                {ehObrigatorio(opt) && (
+                                                    <span className={`badge-obrigatorio ${qtdEscolhidaNoGrupo(opt.id_opcao) >= (Number(opt.qtd_max_escolha) || 1) ? "ok" : ""}`}>
+                                                        Obrigatório {qtdEscolhidaNoGrupo(opt.id_opcao)}/{Number(opt.qtd_max_escolha) || 1}
+                                                    </span>
+                                                )}
+                                            </div>
                                             {opt.itens.map(item => {
                                                 const q = selecionados[item.id_item]?.qtd_item || 0;
                                                 return (
@@ -183,9 +227,9 @@ function ProdutoVitrine(props) {
                                                         <div className="item-controles">
                                                             {item.vl_item > 0 && q >= 0 && <span className="item-valor-adicional">+ {formatar(item.vl_item)}</span>}
                                                             <div className="seletor-mini">
-                                                                <button onClick={() => alterarQtdItem(opt.id_opcao, item, -1, opt.qtd_max_escolha)}>-</button>
+                                                                <button onClick={() => alterarQtdItem(opt, item, -1)}>-</button>
                                                                 <span className={q < 0 ? 'num-negativo' : ''}>{q}</span>
-                                                                <button onClick={() => alterarQtdItem(opt.id_opcao, item, 1, opt.qtd_max_escolha)}>+</button>
+                                                                <button onClick={() => alterarQtdItem(opt, item, 1)}>+</button>
                                                             </div>
                                                         </div>
                                                     </div>

@@ -5,13 +5,26 @@ import api from "../../services/api.js";
 import { CartContext } from "../../contexts/cart-context.jsx";
 import AlertModal from "../../components/alert-modal/AlertModal.jsx";
 
-import { MapContainer, TileLayer, Marker, useMap, LayersControl } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, useMap, LayersControl, LayerGroup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
 import icon from "leaflet/dist/images/marker-icon.png";
 import iconShadow from "leaflet/dist/images/marker-shadow.png";
 import "./checkout.css";
+
+// Agrupa os adicionais escolhidos pelo nome do grupo (ex: "Tamanho", "Complementos")
+function agruparAdicionais(lista = []) {
+    const mapa = new Map();
+    lista.forEach(a => {
+        const chave = a.id_opcao ?? a.descricao_opcao ?? a.grupo ?? "";
+        if (!mapa.has(chave)) {
+            mapa.set(chave, { descricao: a.descricao_opcao ?? a.grupo ?? "", itens: [] });
+        }
+        mapa.get(chave).itens.push(a);
+    });
+    return Array.from(mapa.values());
+}
 
 const DefaultIcon = L.icon({
     iconUrl: icon,
@@ -21,6 +34,37 @@ const DefaultIcon = L.icon({
 });
 
 L.Marker.prototype.options.icon = DefaultIcon;
+
+// Posição padrão do mapa quando ainda não há localização (Pilar do Sul - SP)
+const POSICAO_PADRAO = [-23.8136, -47.7156];
+
+// Camadas do mapa: Satélite (padrão) e Mapa normal
+function CamadasMapa() {
+    return (
+        <LayersControl position="topright">
+            <LayersControl.BaseLayer name="Mapa">
+                <TileLayer
+                    attribution="&copy; OpenStreetMap"
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+            </LayersControl.BaseLayer>
+
+            <LayersControl.BaseLayer checked name="Satélite">
+                <LayerGroup>
+                    <TileLayer
+                        attribution="Tiles &copy; Esri"
+                        url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                        maxZoom={19}
+                    />
+                    <TileLayer
+                        url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+                        maxZoom={19}
+                    />
+                </LayerGroup>
+            </LayersControl.BaseLayer>
+        </LayersControl>
+    );
+}
 
 const fmt = (v) => Number(v || 0).toLocaleString("pt-BR", {
     style: "currency",
@@ -219,6 +263,12 @@ export function Checkout() {
 
     const [posicao, setPosicao] = useState(null);
     const [frete, setFrete] = useState(0);
+    // Frete calculado pelo backend (/cardapio_digital/:slug/frete)
+    const [freteCalculado, setFreteCalculado] = useState(false);
+    const [calculandoFrete, setCalculandoFrete] = useState(false);
+    const [freteInfo, setFreteInfo] = useState(null); // { origem, zona, distancia_km }
+    const freteReqRef = useRef(0); // ignora respostas antigas se o pino for arrastado várias vezes
+    const sugestoesReqRef = useRef(0); // ignora sugestões antigas enquanto o cliente digita
 
     const [cep, setCep] = useState("");
     const [cepStatus, setCepStatus] = useState("");
@@ -300,9 +350,7 @@ export function Checkout() {
                     setPosicao([latOrigem, lngOrigem]);
                 }
 
-                if (taxaBase > 0) {
-                    setFrete(taxaBase);
-                }
+                // O frete só é calculado (pelo backend) depois que o cliente confirmar a localização.
             } catch (err) {
                 console.error("Erro ao carregar configurações de entrega", err);
             } finally {
@@ -443,26 +491,63 @@ export function Checkout() {
         setShowAlert(true);
     };
 
-    function calcularFrete(lat2, lon2) {
-        if (configFrete.taxaBase > 0) {
-            return configFrete.taxaBase;
+    function limparFrete() {
+        freteReqRef.current += 1; // invalida qualquer consulta em andamento
+        setFrete(0);
+        setFreteCalculado(false);
+        setFreteInfo(null);
+        setCalculandoFrete(false);
+    }
+
+    // Consulta o frete no backend (motoboy/zonas/regra do estabelecimento).
+    async function calcularFreteBackend(lat, lng) {
+        const slugAtual = localStorage.getItem("slug");
+        const reqId = ++freteReqRef.current;
+
+        setFreteCalculado(false);
+        setFreteInfo(null);
+
+        if (!slugAtual) {
+            setCalculandoFrete(false);
+            return false;
         }
 
-        if (configFrete.latOrigem === null || configFrete.lngOrigem === null) {
-            return 0;
+        setCalculandoFrete(true);
+
+        try {
+            const res = await api.get(`/cardapio_digital/${slugAtual}/frete`, {
+                params: { lat, lng }
+            });
+
+            if (reqId !== freteReqRef.current) return false;
+
+            const valor = Number(res.data?.valor);
+
+            if (!Number.isFinite(valor) || valor < 0) {
+                throw new Error("Resposta de frete inválida");
+            }
+
+            const distancia = Number(res.data?.distancia_km);
+
+            setFrete(valor);
+            setFreteInfo({
+                origem: res.data?.origem || null,
+                zona: res.data?.zona || null,
+                distancia_km: Number.isFinite(distancia) ? distancia : null
+            });
+            setFreteCalculado(true);
+            return true;
+        } catch (err) {
+            if (reqId !== freteReqRef.current) return false;
+
+            console.error("Erro ao calcular frete", err?.response?.data || err);
+            setFrete(0);
+            setFreteInfo(null);
+            setFreteCalculado(false);
+            return false;
+        } finally {
+            if (reqId === freteReqRef.current) setCalculandoFrete(false);
         }
-
-        const R = 6371;
-        const dLat = (lat2 - configFrete.latOrigem) * Math.PI / 180;
-        const dLon = (lon2 - configFrete.lngOrigem) * Math.PI / 180;
-
-        const a = Math.sin(dLat / 2) ** 2 +
-            Math.cos(configFrete.latOrigem * Math.PI / 180) *
-            Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLon / 2) ** 2;
-
-        const km = Math.ceil(2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * R);
-        return km * configFrete.precoKm;
     }
 
     function rolarParaMapa(ref) {
@@ -474,22 +559,23 @@ export function Checkout() {
         }, 150);
     }
 
-    async function aplicarCoordenadas(lat, lng, origem = "mapa") {
+    // preferido: valores vindos da sugestão escolhida (têm prioridade quando existem)
+    async function aplicarCoordenadas(lat, lng, origem = "mapa", preferido = {}) {
         setPosicao([lat, lng]);
         setEnderecoConfirmado(true);
 
-        const novoFrete = calcularFrete(lat, lng);
-        setFrete(novoFrete);
+        // dispara o cálculo do frete no backend sem travar o reverse geocode
+        calcularFreteBackend(lat, lng);
 
         try {
             const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
             const data = await res.json();
 
             if (data.address) {
-                setEndereco(data.address.road || data.address.pedestrian || endereco);
-                setBairro(data.address.suburb || data.address.neighbourhood || bairro);
-                setCidade(data.address.city || data.address.town || data.address.village || cidade);
-                setUf(estadoParaUf(data.address) || uf);
+                setEndereco(data.address.road || data.address.pedestrian || preferido.endereco || endereco);
+                setBairro(preferido.bairro || data.address.suburb || data.address.neighbourhood || bairro);
+                setCidade(data.address.city || data.address.town || data.address.village || preferido.cidade || cidade);
+                setUf(estadoParaUf(data.address) || preferido.uf || uf);
             }
         } catch (e) {
             console.error("Erro reverse geocode", e);
@@ -500,26 +586,68 @@ export function Checkout() {
         }
     }
 
+    // Fallback silencioso: Nominatim, normalizado para o mesmo formato do backend
+    async function buscarSugestoesNominatim(texto) {
+        const res = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&countrycodes=br&limit=5&q=${encodeURIComponent(texto)}`
+        );
+
+        const data = await res.json();
+
+        return (Array.isArray(data) ? data : []).map(item => {
+            const addr = item.address || {};
+            const partes = String(item.display_name || "").split(",").map(p => p.trim());
+            const rua = addr.road || addr.pedestrian || partes[0] || "";
+
+            return {
+                principal: rua,
+                secundario: partes.slice(1).join(", "),
+                bairro: addr.suburb || addr.neighbourhood || "",
+                cidade: addr.city || addr.town || addr.village || "",
+                uf: estadoParaUf(addr),
+                label: item.display_name || rua,
+                lat: item.lat,
+                lng: item.lon
+            };
+        });
+    }
+
     async function buscarSugestoesEndereco(texto) {
         if (!texto || texto.trim().length < 3) {
+            sugestoesReqRef.current += 1;
             setSugestoesEndereco([]);
             return;
         }
 
+        const reqId = ++sugestoesReqRef.current;
         setBuscandoSugestoes(true);
 
         try {
-            const res = await fetch(
-                `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&countrycodes=br&limit=5&q=${encodeURIComponent(texto)}`
-            );
+            let lista = [];
 
-            const data = await res.json();
-            setSugestoesEndereco(data || []);
+            try {
+                const res = await api.get("/geocode/buscar", {
+                    params: {
+                        q: texto.trim(),
+                        lat: configFrete.latOrigem,
+                        lng: configFrete.lngOrigem
+                    }
+                });
+
+                lista = Array.isArray(res.data) ? res.data : [];
+            } catch (errBackend) {
+                console.error("Erro em /geocode/buscar, usando Nominatim", errBackend?.response?.data || errBackend);
+                lista = await buscarSugestoesNominatim(texto.trim());
+            }
+
+            if (reqId !== sugestoesReqRef.current) return;
+            setSugestoesEndereco(lista);
         } catch (e) {
+            if (reqId !== sugestoesReqRef.current) return;
             console.error("Erro ao buscar sugestões de endereço", e);
             setSugestoesEndereco([]);
         } finally {
-            setBuscandoSugestoes(false);
+            if (reqId === sugestoesReqRef.current) setBuscandoSugestoes(false);
         }
     }
 
@@ -535,23 +663,31 @@ export function Checkout() {
 
     async function selecionarSugestaoEndereco(sugestao) {
         const lat = parseFloat(sugestao.lat);
-        const lng = parseFloat(sugestao.lon);
+        const lng = parseFloat(sugestao.lng ?? sugestao.lon);
 
         if (isNaN(lat) || isNaN(lng)) return;
 
-        const addr = sugestao.address || {};
+        const ruaSugestao = sugestao.principal || "";
+        const bairroSugestao = sugestao.bairro || "";
+        const cidadeSugestao = sugestao.cidade || "";
+        const ufSugestao = sugestao.uf || "";
 
         setMetodoEntrega("endereco");
-        setEnderecoBusca(sugestao.display_name || "");
+        setEnderecoBusca(sugestao.label || [sugestao.principal, sugestao.secundario].filter(Boolean).join(", "));
         setMostrarSugestoes(false);
         setSugestoesEndereco([]);
 
-        setEndereco(addr.road || addr.pedestrian || "");
-        setBairro(addr.suburb || addr.neighbourhood || "");
-        setCidade(addr.city || addr.town || addr.village || "");
-        setUf(estadoParaUf(addr));
+        setEndereco(ruaSugestao);
+        setBairro(bairroSugestao);
+        if (cidadeSugestao) setCidade(cidadeSugestao);
+        if (ufSugestao) setUf(ufSugestao);
 
-        await aplicarCoordenadas(lat, lng);
+        await aplicarCoordenadas(lat, lng, "mapa", {
+            endereco: ruaSugestao,
+            bairro: bairroSugestao,
+            cidade: cidadeSugestao,
+            uf: ufSugestao
+        });
     }
 
     async function handleCep(e) {
@@ -592,7 +728,7 @@ export function Checkout() {
                 await aplicarCoordenadas(parseFloat(geoData[0].lat), parseFloat(geoData[0].lon));
             } else {
                 setEnderecoConfirmado(true);
-                setFrete(configFrete.taxaBase > 0 ? configFrete.taxaBase : 0);
+                limparFrete();
             }
         } catch {
             setCepStatus("erro");
@@ -649,7 +785,13 @@ export function Checkout() {
             return;
         }
 
-        if (configFrete.taxaBase <= 0 && (!frete || frete <= 0)) {
+        if (calculandoFrete) {
+            alerta("Aguarde um instante, estamos calculando a taxa de entrega.");
+            return;
+        }
+
+        // frete 0 é válido (ex.: entrega grátis numa zona), desde que o backend tenha confirmado o cálculo
+        if (!freteCalculado || !Number.isFinite(frete) || frete < 0) {
             alerta("Não foi possível calcular a entrega. Confira a localização no mapa.");
             return;
         }
@@ -735,7 +877,7 @@ export function Checkout() {
             if (!validarStep1()) return;
 
             if (tipoEntrega === "retirada") {
-                setFrete(0);
+                limparFrete();
                 setEnderecoConfirmado(true);
                 setStep(3);
                 return;
@@ -780,7 +922,12 @@ export function Checkout() {
         const itensResumo = cartItems
             .map(item => {
                 const qtd = Number(item.qtd ?? 1);
-                return `${qtd}x ${item.nome}`;
+                const linhasAdic = (item.adicionais || [])
+                    .map(a => `   - ${a.nome_formatado ?? a.nome ?? a.nome_item}`)
+                    .join("\n");
+                return linhasAdic
+                    ? `${qtd}x ${item.nome}\n${linhasAdic}`
+                    : `${qtd}x ${item.nome}`;
             })
             .join("\n");
 
@@ -977,7 +1124,37 @@ export function Checkout() {
 
     const STEPS = ["Dados", "Entrega", "Pagamento", "Revisão"];
     const totalPedido = totalCart + (tipoEntrega === "retirada" ? 0 : frete);
-    const freteFixoAtivo = configFrete.taxaBase > 0;
+
+    const renderFreteBadge = () => (
+        <>
+            <div className="frete-badge">
+                Taxa de entrega:{" "}
+                <strong>
+                    {calculandoFrete ? "Calculando..." : freteCalculado ? fmt(frete) : "A calcular"}
+                </strong>
+
+                {freteCalculado && freteInfo?.origem === "fixo" && (
+                    <span className="tag-info" style={{ marginLeft: 6 }}>fixa</span>
+                )}
+
+                {freteCalculado && freteInfo?.zona && (
+                    <span className="tag-info" style={{ marginLeft: 6 }}>{freteInfo.zona}</span>
+                )}
+
+                {freteCalculado && Number.isFinite(freteInfo?.distancia_km) && (
+                    <span className="tag-info" style={{ marginLeft: 6 }}>
+                        {freteInfo.distancia_km.toFixed(1).replace(".", ",")} km
+                    </span>
+                )}
+            </div>
+
+            {enderecoConfirmado && !calculandoFrete && !freteCalculado && (
+                <div className="frete-aviso">
+                    Não conseguimos calcular a taxa para este local. Ajuste o pino no mapa e tente de novo.
+                </div>
+            )}
+        </>
+    );
 
     const stepVisual = (tipoEntrega === "retirada" && step >= 3) ? step - 1 : step;
 
@@ -1070,7 +1247,10 @@ export function Checkout() {
                                     <button
                                         type="button"
                                         className={`pay-btn ${tipoEntrega === "entrega" ? "active" : ""}`}
-                                        onClick={() => setTipoEntrega("entrega")}
+                                        onClick={() => {
+                                            setTipoEntrega("entrega");
+                                            if (!freteCalculado) setEnderecoConfirmado(false);
+                                        }}
                                     >
                                         Entrega
                                     </button>
@@ -1096,10 +1276,7 @@ export function Checkout() {
                     <div className="box-checkout">
                         <h3 className="box-title">Entrega</h3>
 
-                        <div className="frete-badge">
-                            Taxa de entrega: <strong>{fmt(frete)}</strong>
-                            {freteFixoAtivo && <span className="tag-info"> fixa</span>}
-                        </div>
+                        {renderFreteBadge()}
 
                         <div className="payment-selector espacamento-top">
                             {[
@@ -1144,11 +1321,16 @@ export function Checkout() {
                                         <ul className="sugestoes-lista">
                                             {sugestoesEndereco.map((s, i) => (
                                                 <li
-                                                    key={i}
+                                                    key={`${s.lat}-${s.lng}-${i}`}
                                                     className="sugestao-item"
                                                     onMouseDown={() => selecionarSugestaoEndereco(s)}
                                                 >
-                                                    {s.display_name}
+                                                    <strong>{s.principal || s.label}</strong>
+                                                    {(s.secundario || s.bairro) && (
+                                                        <span style={{ display: "block", fontSize: "0.75rem", color: "#888" }}>
+                                                            {s.secundario || s.bairro}
+                                                        </span>
+                                                    )}
                                                 </li>
                                             ))}
                                         </ul>
@@ -1220,25 +1402,13 @@ export function Checkout() {
                                 ) : (
                                     <>
                                         <MapContainer
-                                            center={posicao || [0, 0]}
-                                            zoom={posicao ? 16 : 2}
-                                            style={{ height: "100%", width: "100%" }}
+                                            center={posicao || POSICAO_PADRAO}
+                                            zoom={16}
+                                            style={{ height: "230px", width: "100%" }}
                                         >
-                                            <LayersControl position="topright">
-                                                <LayersControl.BaseLayer checked name="Ruas">
-                                                    <TileLayer
-                                                        url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-                                                        attribution="© OpenStreetMap"
-                                                    />
-                                                </LayersControl.BaseLayer>
+                                            <CamadasMapa />
 
-                                                <LayersControl.BaseLayer name="Satélite">
-                                                    <TileLayer
-                                                        url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                                                        attribution="© Esri"
-                                                    />
-                                                </LayersControl.BaseLayer>
-                                            </LayersControl>
+                                            <MapRefresher center={posicao} />
 
                                             {posicao && (
                                                 <Marker
@@ -1252,8 +1422,6 @@ export function Checkout() {
                                                     }}
                                                 />
                                             )}
-
-                                            <MapRefresher center={posicao} />
                                         </MapContainer>
 
                                         {!posicao && (
@@ -1285,35 +1453,18 @@ export function Checkout() {
                     <div className="box-checkout">
                         <h3 className="box-title">Conferir entrega</h3>
 
-                        <div className="frete-badge">
-                            Taxa de entrega: <strong>{fmt(frete)}</strong>
-                            {freteFixoAtivo && <span className="tag-info"> fixa</span>}
-                        </div>
+                        {renderFreteBadge()}
 
                         <div className="loc-opcao" ref={mapaDetalhesRef}>
                             <div className="loc-opcao-titulo">Ajuste fino no mapa</div>
 
                             <div className="mapa-container" style={{ position: "relative" }}>
                                 <MapContainer
-                                    center={posicao || [0, 0]}
-                                    zoom={posicao ? 16 : 2}
+                                    center={posicao || POSICAO_PADRAO}
+                                    zoom={16}
                                     style={{ height: "100%", width: "100%" }}
                                 >
-                                    <LayersControl position="topright">
-                                        <LayersControl.BaseLayer checked name="Ruas">
-                                            <TileLayer
-                                                url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-                                                attribution="© OpenStreetMap"
-                                            />
-                                        </LayersControl.BaseLayer>
-
-                                        <LayersControl.BaseLayer name="Satélite">
-                                            <TileLayer
-                                                url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                                                attribution="© Esri"
-                                            />
-                                        </LayersControl.BaseLayer>
-                                    </LayersControl>
+                                    <CamadasMapa />
 
                                     {posicao && (
                                         <Marker
@@ -1513,6 +1664,38 @@ export function Checkout() {
                                                         <span>{qtdItem}x {item.nome}</span>
                                                         <span>{fmt(precoItem * qtdItem)}</span>
                                                     </div>
+
+                                                    {(item.adicionais || []).length > 0 && (
+                                                        <div className="revisao-adicionais-lista">
+                                                            {agruparAdicionais(item.adicionais).map((grupo, gi) => (
+                                                                <div key={gi} className="revisao-grupo">
+                                                                    {grupo.descricao && (
+                                                                        <span className="revisao-grupo-titulo">{grupo.descricao}</span>
+                                                                    )}
+                                                                    {grupo.itens.map((a, ai) => {
+                                                                        const vl = Number(a.vl_item ?? a.valor ?? 0) * Number(a.qtd_item ?? 1);
+                                                                        return (
+                                                                            <div key={ai} className="revisao-adicional-linha">
+                                                                                <span>+ {a.nome_formatado ?? a.nome ?? a.nome_item}</span>
+                                                                                <span>{vl > 0 ? fmt(vl) : "incluso"}</span>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+
+                                                    {(item.removidos || []).map((r, ri) => (
+                                                        <p key={ri} className="revisao-obs">SEM {String(r).toUpperCase()}</p>
+                                                    ))}
+
+                                                    {(() => {
+                                                        const obsCliente = item.obs_cliente !== undefined
+                                                            ? item.obs_cliente
+                                                            : ((item.adicionais || []).length > 0 ? "" : item.observacao);
+                                                        return obsCliente ? <p className="revisao-obs">Obs: {obsCliente}</p> : null;
+                                                    })()}
                                                 </div>
                                             );
                                         })

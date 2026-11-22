@@ -258,6 +258,9 @@ export function Checkout() {
     const idempotencyKeyRef = useRef(null);
     const [step, setStep] = useState(1);
 
+    // Já existia um Pix pendente ao abrir a tela? (evita piscar a tela de sacola vazia na restauração)
+    const [pixPendenteNaEntrada] = useState(() => !!lerPixPendente());
+
     const [configFrete, setConfigFrete] = useState({
         latOrigem: null,
         lngOrigem: null,
@@ -1201,6 +1204,32 @@ export function Checkout() {
     );
 
     const stepVisual = (tipoEntrega === "retirada" && step >= 3) ? step - 1 : step;
+
+    // Sacola vazia: não deixa o cliente andar pelas etapas (nem chegar na revisão com R$ 0,00).
+    // Não bloqueia quando o pedido acabou de ser enviado (sucesso), nem durante o fluxo do Pix.
+    const sacolaVazia = !cartItems || cartItems.length === 0;
+    if (sacolaVazia && !showSucesso && !pixGerado && !pedidoBloqueado && !pixPendenteNaEntrada) {
+        const slugVolta = localStorage.getItem("slug");
+        return (
+            <div className="checkout-page">
+                <Navbar />
+                <div className="checkout-wrapper">
+                    <div className="box-checkout">
+                        <h3 className="box-title">Sua sacola está vazia</h3>
+                        <p style={{ margin: "8px 0 18px", opacity: 0.8 }}>
+                            Adicione pelo menos um item no cardápio para finalizar o pedido.
+                        </p>
+                        <button
+                            className="btn-checkout"
+                            onClick={() => (slugVolta ? navigate(`/${slugVolta}`) : navigate(-1))}
+                        >
+                            Voltar ao cardápio
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="checkout-page">

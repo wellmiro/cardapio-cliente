@@ -132,6 +132,25 @@
     z-index: 5 !important;
 }
 
+/* 6. AVISO "IMAGEM ILUSTRATIVA" NO CARD (DESKTOP) */
+.aviso-ilustrativa-card {
+    position: absolute !important;
+    left: 50% !important;
+    bottom: 6px !important;
+    transform: translateX(-50%) !important;
+    background: rgba(153, 27, 27, 0.82) !important;
+    color: #ffffff !important;
+    font-size: 0.66rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.2px !important;
+    line-height: 1 !important;
+    padding: 4px 9px !important;
+    border-radius: 20px !important;
+    white-space: nowrap !important;
+    pointer-events: none !important;
+    z-index: 4 !important;
+}
+
 /* ==========================================================================
    VERSÃO CELULAR (MOBILE) — BOLINHA LARANJA COM + VERMELHO
    ========================================================================== */
@@ -193,6 +212,11 @@
         width: 100% !important;
         height: 100% !important;
         object-fit: cover !important;
+    }
+
+    /* No celular a foto é pequena: o aviso fica só dentro do modal */
+    .aviso-ilustrativa-card {
+        display: none !important;
     }
 
     /* A BOLINHA LARANJA COM O + VERMELHO */
@@ -292,12 +316,73 @@
     width: 100%;
     height: 190px;
     background: #f8fafc;
+    flex-shrink: 0;
 }
 
 .modal-header-img img {
     width: 100%;
     height: 100%;
     object-fit: cover;
+}
+
+/* Degradê sutil no pé da foto para o aviso ficar sempre legível */
+.modal-header-img::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 64px;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0));
+    pointer-events: none;
+}
+
+/* AVISO "IMAGEM MERAMENTE ILUSTRATIVA" NO MODAL */
+.aviso-ilustrativa-modal {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    max-width: calc(100% - 24px);
+    padding: 6px 12px 6px 7px;
+    background: rgba(185, 28, 28, 0.9);
+    color: #ffffff;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    line-height: 1.1;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    pointer-events: none;
+}
+
+.aviso-ilustrativa-icone {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    background: #ffffff;
+    color: #b91c1c;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 900;
+    line-height: 1;
+}
+
+@media (max-width: 360px) {
+    .aviso-ilustrativa-modal {
+        font-size: 0.72rem;
+        left: 8px;
+        bottom: 8px;
+    }
 }
 
 .btn-modal-close {
@@ -313,6 +398,7 @@
     font-size: 16px;
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    z-index: 3;
 }
 
 .modal-body {

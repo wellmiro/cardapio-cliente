@@ -135,7 +135,11 @@ function ProdutoVitrine(props) {
         <>
             <div className="produto-box" onClick={() => setAberto(true)}>
                 {qtdExibir > 0 && <div className="badge-qtd">{qtdExibir}</div>}
-                <div className="produto-img-container"><img src={fotoProduto} alt={props.nome} /></div>
+                <div className="produto-img-container">
+                    <img src={fotoProduto} alt={props.nome} />
+                    {/* Aviso discreto no card (aparece só no desktop; no celular fica oculto) */}
+                    <span className="aviso-ilustrativa-card">Imagem ilustrativa</span>
+                </div>
                 <div className="produto-info">
                     <h2 className="prod-vitrine-nome">{props.nome}</h2>
                     <p className="prod-vitrine-descricao">{props.descricao}</p>
@@ -150,6 +154,10 @@ function ProdutoVitrine(props) {
                         <div className="modal-header-img">
                              <img src={fotoProduto} alt={props.nome} />
                              <button className="btn-modal-close" onClick={() => setAberto(false)}>✕</button>
+                             <div className="aviso-ilustrativa-modal" role="note">
+                                 <span className="aviso-ilustrativa-icone" aria-hidden="true">!</span>
+                                 Imagem meramente ilustrativa
+                             </div>
                         </div>
                         <div className="modal-body">
                             <h2 className="modal-title">{props.nome}</h2>

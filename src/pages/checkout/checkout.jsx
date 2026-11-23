@@ -5,7 +5,7 @@ import api from "../../services/api.js";
 import { CartContext } from "../../contexts/cart-context.jsx";
 import AlertModal from "../../components/alert-modal/AlertModal.jsx";
 
-import { MapContainer, TileLayer, Marker, useMap, LayersControl, LayerGroup } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, useMap, useMapEvents, LayersControl, LayerGroup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
@@ -38,6 +38,11 @@ L.Marker.prototype.options.icon = DefaultIcon;
 // Posição padrão do mapa quando ainda não há localização (Pilar do Sul - SP)
 const POSICAO_PADRAO = [-23.8136, -47.7156];
 
+// A Esri mostra "Map data not yet available" em zoom alto em áreas rurais
+const ZOOM_MAXIMO_SATELITE = 17;
+const ZOOM_MAXIMO_MAPA = 18;
+const ENDERECO_RURAL_PADRAO = "Área Rural / Estrada sem nome";
+
 // Camadas do mapa: Satélite (padrão) e Mapa normal
 function CamadasMapa() {
     return (
@@ -46,6 +51,8 @@ function CamadasMapa() {
                 <TileLayer
                     attribution="&copy; OpenStreetMap"
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    maxZoom={ZOOM_MAXIMO_MAPA}
+                    maxNativeZoom={ZOOM_MAXIMO_MAPA}
                 />
             </LayersControl.BaseLayer>
 
@@ -54,11 +61,13 @@ function CamadasMapa() {
                     <TileLayer
                         attribution="Tiles &copy; Esri"
                         url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                        maxZoom={19}
+                        maxZoom={ZOOM_MAXIMO_SATELITE}
+                        maxNativeZoom={ZOOM_MAXIMO_SATELITE}
                     />
                     <TileLayer
                         url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
-                        maxZoom={19}
+                        maxZoom={ZOOM_MAXIMO_SATELITE}
+                        maxNativeZoom={ZOOM_MAXIMO_SATELITE}
                     />
                 </LayerGroup>
             </LayersControl.BaseLayer>
@@ -220,7 +229,7 @@ function MapRefresher({ center }) {
     useEffect(() => {
         if (!center) return;
 
-        const zoomAtual = jaIniciouRef.current ? map.getZoom() : 16;
+        const zoomAtual = jaIniciouRef.current ? Math.min(map.getZoom(), 17) : 16;
         jaIniciouRef.current = true;
 
         map.setView(center, zoomAtual);
@@ -230,6 +239,16 @@ function MapRefresher({ center }) {
     return null;
 }
 
+// Tocar/clicar em qualquer ponto do mapa move o pino para lá
+function CliqueMapa({ onSelect }) {
+    useMapEvents({
+        click(e) {
+            onSelect(e.latlng.lat, e.latlng.lng);
+        }
+    });
+
+    return null;
+}
 
 function ModalSucesso({ onClose }) {
     return (
@@ -302,6 +321,7 @@ export function Checkout() {
     const [cepStatus, setCepStatus] = useState("");
     const [locInput, setLocInput] = useState("");
     const [locStatus, setLocStatus] = useState("");
+    const [obtendoGps, setObtendoGps] = useState(false);
 
     const [enderecoBusca, setEnderecoBusca] = useState("");
     const [sugestoesEndereco, setSugestoesEndereco] = useState([]);
@@ -328,8 +348,8 @@ export function Checkout() {
     const [mpPaymentId, setMpPaymentId] = useState(null);
     const [copiado, setCopiado] = useState(false);
 
-    // Notificação do Pix fica GUARDADA aqui e só é enviada depois que o pagamento for aprovado
-    const notificacaoPixRef = useRef(null);
+    // A notificação do Pix é criada pelo SERVIDOR (webhook ou GET /pix/status) ao aprovar o pagamento.
+    // Aqui só controlamos a trava para finalizar a tela uma única vez.
     const pixConfirmadoRef = useRef(false);
 
     const mapaPreviewRef = useRef(null);
@@ -427,7 +447,6 @@ export function Checkout() {
         if (pendente.slug && slugAtual && pendente.slug !== slugAtual) return;
 
         pixConfirmadoRef.current = false;
-        notificacaoPixRef.current = pendente.notificacao || null;
         envioEmAndamentoRef.current = true;
 
         setPagamento("pix");
@@ -446,22 +465,13 @@ export function Checkout() {
         };
     }, []);
 
-    // Pix aprovado: notifica (uma única vez), limpa sacola e leva pro histórico
-    const finalizarPixAprovado = useCallback(async () => {
+    // Pix aprovado: limpa sacola e leva pro histórico (uma única vez).
+    // A notificação do estabelecimento já foi criada pelo servidor quando o GET /pix/status
+    // (ou o webhook do Mercado Pago) confirmou o pagamento; o front não envia mais nada.
+    const finalizarPixAprovado = useCallback(() => {
         // trava síncrona: várias verificações podem voltar juntas
         if (pixConfirmadoRef.current) return;
         pixConfirmadoRef.current = true;
-
-        // O servidor já cria a notificação ao confirmar o Pix; aqui é só reforço.
-        // A rota /notificacoes/publico ignora duplicadas.
-        if (notificacaoPixRef.current) {
-            try {
-                await api.post("/notificacoes/publico", notificacaoPixRef.current);
-            } catch (errNotif) {
-                console.error("Erro ao enviar notificação do Pix:", errNotif.response?.data || errNotif);
-            }
-            notificacaoPixRef.current = null;
-        }
 
         limparPixPendente();
         setCartItems([]);
@@ -489,8 +499,9 @@ export function Checkout() {
                 params: { _t: agora }
             });
 
-            if (res.data?.pago || res.data?.status === "approved") {
-                await finalizarPixAprovado();
+            // `pago` só vem true depois que o servidor atualizou o pedido E garantiu a notificação
+            if (res.data?.pago) {
+                finalizarPixAprovado();
             }
         } catch (err) {
             console.error("Erro ao verificar status do Pix:", err);
@@ -632,6 +643,9 @@ export function Checkout() {
         } catch (e) {
             console.error("Erro reverse geocode", e);
         }
+
+        // Área rural: o Nominatim muitas vezes não devolve rua. Não deixa travar a validação.
+        setEndereco(prev => (prev && prev.trim() ? prev : ENDERECO_RURAL_PADRAO));
 
         if (origem !== "drag") {
             rolarParaMapa(mapaPreviewRef);
@@ -811,6 +825,47 @@ export function Checkout() {
         await aplicarCoordenadas(lat, lng, "drag");
     }
 
+    function usarMinhaLocalizacaoGPS() {
+        if (obtendoGps) return;
+
+        if (!navigator.geolocation) {
+            alerta("Seu navegador não suporta localização automática. Arraste o pino no mapa.");
+            return;
+        }
+
+        setObtendoGps(true);
+
+        navigator.geolocation.getCurrentPosition(
+            async (pos) => {
+                try {
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
+
+                    setMetodoEntrega("mapa");
+                    setCepStatus("");
+                    setLocStatus("");
+
+                    await aplicarCoordenadas(lat, lng, "gps");
+                } catch (e) {
+                    console.error("Erro ao aplicar GPS", e);
+                    alerta("Não foi possível obter o GPS agora. Arraste o pino no mapa até sua casa.");
+                } finally {
+                    setObtendoGps(false);
+                }
+            },
+            (err) => {
+                setObtendoGps(false);
+
+                if (err.code === 1) {
+                    alerta("Permissão de localização negada. Ative o GPS do celular ou arraste o pino no mapa.");
+                } else {
+                    alerta("Não foi possível obter o GPS agora. Arraste o pino no mapa até sua casa.");
+                }
+            },
+            { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+        );
+    }
+
     function validarStep1() {
         if (!nome.trim()) {
             alerta("Por favor, informe seu nome.");
@@ -959,7 +1014,7 @@ export function Checkout() {
         setStep(s => Math.max(s - 1, 1));
     };
 
-    // Monta o payload da notificação (sem enviar)
+    // Monta o payload da notificação (usado só por Dinheiro / Cartão; o Pix é notificado pelo servidor)
     function montarPayloadNotificacao(enderecoCompleto, idPedido) {
         let formaPagamentoTexto = "PIX";
 
@@ -1121,9 +1176,9 @@ export function Checkout() {
                 const respostaPedido = await api.post("/pedidos/publico", payloadComMpId);
                 const idPed = respostaPedido.data.id_pedido;
 
-                // NÃO notifica agora: só guarda. O envio acontece quando o Pix for aprovado.
+                // O pedido já está no banco com o mp_payment_id (o webhook sempre o encontra).
+                // A notificação é criada pelo servidor quando o Pix for aprovado.
                 pixConfirmadoRef.current = false;
-                notificacaoPixRef.current = montarPayloadNotificacao(enderecoCompleto, idPed);
 
                 setPixQrCodeBase64(pixRes.data.mp_qr_code_base64);
                 setPixCopiaECola(pixRes.data.mp_qr_code);
@@ -1134,8 +1189,7 @@ export function Checkout() {
                     idPedido: idPed,
                     slug: slugAtual,
                     qrBase64: pixRes.data.mp_qr_code_base64,
-                    copiaECola: pixRes.data.mp_qr_code,
-                    notificacao: notificacaoPixRef.current
+                    copiaECola: pixRes.data.mp_qr_code
                 });
 
                 setPixGerado(true);
@@ -1356,6 +1410,22 @@ export function Checkout() {
 
                         {renderFreteBadge()}
 
+                        <button
+                            type="button"
+                            className="btn-gps-localizacao espacamento-top"
+                            onClick={usarMinhaLocalizacaoGPS}
+                            disabled={obtendoGps}
+                        >
+                            {obtendoGps ? (
+                                <>
+                                    <span className="spinner"></span> Localizando seu GPS...
+                                </>
+                            ) : (
+                                <>📍 Usar minha localização atual (GPS)</>
+                            )}
+                        </button>
+                        <p className="gps-dica">Ideal para sítios, chácaras ou se você não souber o CEP</p>
+
                         <div className="payment-selector espacamento-top">
                             {[
                                 { id: "endereco", label: "Endereço" },
@@ -1467,7 +1537,7 @@ export function Checkout() {
 
                         {metodoEntrega === "mapa" && (
                             <div className="loc-opcao">
-                                <div className="loc-opcao-titulo">Arraste o marcador até o local da entrega</div>
+                                <div className="loc-opcao-titulo">Toque no mapa ou arraste o pino azul até o portão da entrega</div>
                             </div>
                         )}
 
@@ -1482,9 +1552,11 @@ export function Checkout() {
                                         <MapContainer
                                             center={posicao || POSICAO_PADRAO}
                                             zoom={16}
+                                            maxZoom={17}
                                             style={{ height: "230px", width: "100%" }}
                                         >
                                             <CamadasMapa />
+                                            <CliqueMapa onSelect={handleMapaManualDrag} />
 
                                             <MapRefresher center={posicao} />
 
@@ -1504,7 +1576,7 @@ export function Checkout() {
 
                                         {!posicao && (
                                             <div className="mapa-overlay-vazio">
-                                                Escolha endereço, CEP, link ou arraste no mapa.
+                                                Escolha endereço, CEP, link ou toque no mapa.
                                             </div>
                                         )}
                                     </>
@@ -1540,9 +1612,11 @@ export function Checkout() {
                                 <MapContainer
                                     center={posicao || POSICAO_PADRAO}
                                     zoom={16}
+                                    maxZoom={17}
                                     style={{ height: "100%", width: "100%" }}
                                 >
                                     <CamadasMapa />
+                                    <CliqueMapa onSelect={handleMapaManualDrag} />
 
                                     {posicao && (
                                         <Marker
@@ -1574,13 +1648,22 @@ export function Checkout() {
                                 />
                             </div>
 
-                            <div className="input-group" style={{ flex: 1 }}>
+                            <div className="input-group" style={{ flex: 2 }}>
                                 <label>Nº <span className="obrig">*</span></label>
-                                <input
-                                    value={numero}
-                                    onChange={e => setNumero(e.target.value)}
-                                    placeholder="123"
-                                />
+                                <div className="numero-wrap">
+                                    <input
+                                        value={numero}
+                                        onChange={e => setNumero(e.target.value)}
+                                        placeholder="123"
+                                    />
+                                    <button
+                                        type="button"
+                                        className={`btn-sem-numero ${numero === "S/N" ? "ativo" : ""}`}
+                                        onClick={() => setNumero(numero === "S/N" ? "" : "S/N")}
+                                    >
+                                        S/N
+                                    </button>
+                                </div>
                             </div>
                         </div>
 

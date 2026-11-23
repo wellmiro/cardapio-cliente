@@ -708,3 +708,68 @@
     background: #d32f2f;
     color: #fff;
 }
+
+/* ===== MAPA (padrão Uber / iFood: pino fixo no centro, o cliente arrasta o mapa) ===== */
+.mapa-container {
+    height: 340px;
+    position: relative;
+}
+
+@media (max-width: 600px) {
+    .mapa-container {
+        height: 58vh;
+        min-height: 340px;
+        max-height: 520px;
+    }
+}
+
+/* botões de zoom maiores para o toque */
+.mapa-container .leaflet-touch .leaflet-bar a,
+.mapa-container .leaflet-bar a {
+    width: 40px;
+    height: 40px;
+    line-height: 40px;
+    font-size: 20px;
+}
+
+/* pino parado no centro; a ponta do pino fica exatamente no centro do mapa */
+.mapa-pino-central {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 25px;
+    height: 41px;
+    margin-left: -12px;
+    margin-top: -41px;
+    z-index: 600;
+    pointer-events: none;
+}
+
+.mapa-pino-central img {
+    width: 25px;
+    height: 41px;
+    display: block;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+.mapa-dica {
+    position: absolute;
+    left: 50%;
+    bottom: 14px;
+    transform: translateX(-50%);
+    background: rgba(26, 32, 44, 0.88);
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 8px 14px;
+    border-radius: 20px;
+    z-index: 600;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+.btn-cancelar-pix:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}

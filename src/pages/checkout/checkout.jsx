@@ -5,8 +5,10 @@ import api from "../../services/api.js";
 import { gerarUUID } from "../../utils/uuid.js";
 import { CartContext } from "../../contexts/cart-context.jsx";
 import AlertModal from "../../components/alert-modal/AlertModal.jsx";
+import ErrorBoundary from "../../components/error-boundary/ErrorBoundary.jsx";
+import { lerPerfilCliente, salvarPerfilCliente } from "../../utils/storage.js";
 
-import { MapContainer, TileLayer, Marker, useMap, useMapEvents, LayersControl, LayerGroup } from "react-leaflet";
+import { MapContainer, TileLayer, useMap, useMapEvents, LayersControl, LayerGroup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
@@ -41,14 +43,14 @@ const POSICAO_PADRAO = [-23.8136, -47.7156];
 
 // A Esri mostra "Map data not yet available" em zoom alto em áreas rurais
 const ZOOM_MAXIMO_SATELITE = 17;
-const ZOOM_MAXIMO_MAPA = 18;
+const ZOOM_MAXIMO_MAPA = 19;
 const ENDERECO_RURAL_PADRAO = "Área Rural / Estrada sem nome";
 
-// Camadas do mapa: Satélite (padrão) e Mapa normal
+// Camadas do mapa: Mapa de ruas (padrão, com nomes e números) e Satélite (opcional)
 function CamadasMapa() {
     return (
         <LayersControl position="topright">
-            <LayersControl.BaseLayer name="Mapa">
+            <LayersControl.BaseLayer checked name="Mapa">
                 <TileLayer
                     attribution="&copy; OpenStreetMap"
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -57,17 +59,17 @@ function CamadasMapa() {
                 />
             </LayersControl.BaseLayer>
 
-            <LayersControl.BaseLayer checked name="Satélite">
+            <LayersControl.BaseLayer name="Satélite">
                 <LayerGroup>
                     <TileLayer
                         attribution="Tiles &copy; Esri"
                         url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                        maxZoom={ZOOM_MAXIMO_SATELITE}
+                        maxZoom={ZOOM_MAXIMO_MAPA}
                         maxNativeZoom={ZOOM_MAXIMO_SATELITE}
                     />
                     <TileLayer
                         url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
-                        maxZoom={ZOOM_MAXIMO_SATELITE}
+                        maxZoom={ZOOM_MAXIMO_MAPA}
                         maxNativeZoom={ZOOM_MAXIMO_SATELITE}
                     />
                 </LayerGroup>
@@ -223,24 +225,43 @@ function linkWhatsApp(tel, mensagem) {
     return `https://wa.me/${telefoneComDDI(tel)}?text=${encodeURIComponent(mensagem)}`;
 }
 
-function MapRefresher({ center }) {
+// Centraliza o mapa quando a posição muda por código (GPS, busca, CEP, toque).
+// programaticoRef evita que esse movimento seja confundido com o cliente arrastando o mapa.
+function MapRefresher({ center, programaticoRef }) {
     const map = useMap();
     const jaIniciouRef = useRef(false);
 
     useEffect(() => {
-        if (!center) return;
+        if (!center) return undefined;
 
-        const zoomAtual = jaIniciouRef.current ? Math.min(map.getZoom(), 17) : 16;
+        const zoomAtual = jaIniciouRef.current ? Math.min(map.getZoom(), ZOOM_MAXIMO_MAPA) : 17;
         jaIniciouRef.current = true;
 
-        map.setView(center, zoomAtual);
-        setTimeout(() => map.invalidateSize(), 300);
-    }, [center, map]);
+        if (programaticoRef) programaticoRef.current = true;
+
+        try {
+            map.setView(center, zoomAtual, { animate: false });
+        } catch (e) {
+            console.error("Erro ao centralizar o mapa", e);
+        }
+
+        const t1 = setTimeout(() => {
+            try { map.invalidateSize(); } catch (e) { /* mapa já foi removido */ }
+        }, 300);
+        const t2 = setTimeout(() => {
+            if (programaticoRef) programaticoRef.current = false;
+        }, 600);
+
+        return () => {
+            clearTimeout(t1);
+            clearTimeout(t2);
+        };
+    }, [center, map, programaticoRef]);
 
     return null;
 }
 
-// Tocar/clicar em qualquer ponto do mapa move o pino para lá
+// Tocar em qualquer ponto do mapa leva o pino (fixo no centro) até lá
 function CliqueMapa({ onSelect }) {
     useMapEvents({
         click(e) {
@@ -249,6 +270,48 @@ function CliqueMapa({ onSelect }) {
     });
 
     return null;
+}
+
+// Padrão Uber/iFood: o pino fica parado no centro e o cliente arrasta o MAPA por baixo dele.
+// Ao soltar, o centro do mapa vira o local da entrega.
+function ArrastarMapaParaEscolher({ onSelect, programaticoRef }) {
+    const map = useMapEvents({
+        dragend() {
+            if (programaticoRef && programaticoRef.current) return;
+            const c = map.getCenter();
+            onSelect(c.lat, c.lng);
+        }
+    });
+
+    return null;
+}
+
+function MapaEntrega({ posicao, onSelect, programaticoRef }) {
+    return (
+        <>
+            <MapContainer
+                center={posicao || POSICAO_PADRAO}
+                zoom={17}
+                maxZoom={ZOOM_MAXIMO_MAPA}
+                touchZoom="center"
+                scrollWheelZoom="center"
+                style={{ height: "100%", width: "100%" }}
+            >
+                <CamadasMapa />
+                <CliqueMapa onSelect={onSelect} />
+                <ArrastarMapaParaEscolher onSelect={onSelect} programaticoRef={programaticoRef} />
+                <MapRefresher center={posicao} programaticoRef={programaticoRef} />
+            </MapContainer>
+
+            <div className="mapa-pino-central" aria-hidden="true">
+                <img src={icon} alt="" draggable="false" />
+            </div>
+
+            {!posicao && (
+                <div className="mapa-dica">Arraste o mapa até o portão da entrega</div>
+            )}
+        </>
+    );
 }
 
 function ModalSucesso({ onClose }) {
@@ -266,7 +329,7 @@ function ModalSucesso({ onClose }) {
     );
 }
 
-export function Checkout() {
+function CheckoutInterno() {
     const { cartItems, totalCart, setCartItems, setTotalCart } = useContext(CartContext);
     const navigate = useNavigate();
 
@@ -300,10 +363,18 @@ export function Checkout() {
 
     const [somenteRetirada, setSomenteRetirada] = useState(false);
 
-    const [nome, setNome] = useState("");
-    const [fone, setFone] = useState("");
+    // Nome e telefone ficam salvos (com fallback para navegadores antigos) para o próximo pedido
+    const [nome, setNome] = useState(() => lerPerfilCliente().nome);
+    const [fone, setFone] = useState(() => lerPerfilCliente().fone);
     const [email, setEmail] = useState("");
     const [cpf, setCpf] = useState("");
+
+    useEffect(() => {
+        salvarPerfilCliente({ nome, fone });
+    }, [nome, fone]);
+
+    const mapaProgramaticoRef = useRef(false);
+    const [cancelandoPix, setCancelandoPix] = useState(false);
 
     const [tipoEntrega, setTipoEntrega] = useState(null);
 
@@ -831,42 +902,81 @@ export function Checkout() {
     function usarMinhaLocalizacaoGPS() {
         if (obtendoGps) return;
 
-        if (!navigator.geolocation) {
-            alerta("Seu navegador não suporta localização automática. Arraste o pino no mapa.");
+        const MSG_MANUAL = "Digite seu endereço ou CEP, ou arraste o mapa até a sua casa.";
+
+        if (typeof navigator === "undefined" || !navigator.geolocation) {
+            alerta("Seu aparelho não permite localização automática. " + MSG_MANUAL);
             return;
         }
 
         setObtendoGps(true);
+        let finalizado = false;
 
-        navigator.geolocation.getCurrentPosition(
-            async (pos) => {
-                try {
-                    const lat = pos.coords.latitude;
-                    const lng = pos.coords.longitude;
+        // Em alguns aparelhos antigos nenhum callback é chamado: o relógio garante que a tela não trava
+        const vigia = setTimeout(() => {
+            if (finalizado) return;
+            finalizado = true;
+            setObtendoGps(false);
+            alerta("Não conseguimos pegar sua localização a tempo. " + MSG_MANUAL);
+        }, 25000);
 
-                    setMetodoEntrega("mapa");
-                    setCepStatus("");
-                    setLocStatus("");
+        const aoSucesso = async (pos) => {
+            if (finalizado) return;
+            finalizado = true;
+            clearTimeout(vigia);
 
-                    await aplicarCoordenadas(lat, lng, "gps");
-                } catch (e) {
-                    console.error("Erro ao aplicar GPS", e);
-                    alerta("Não foi possível obter o GPS agora. Arraste o pino no mapa até sua casa.");
-                } finally {
-                    setObtendoGps(false);
+            try {
+                const lat = pos && pos.coords ? pos.coords.latitude : NaN;
+                const lng = pos && pos.coords ? pos.coords.longitude : NaN;
+
+                if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+                    throw new Error("Coordenadas inválidas");
                 }
-            },
-            (err) => {
+
+                setMetodoEntrega("mapa");
+                setCepStatus("");
+                setLocStatus("");
+
+                await aplicarCoordenadas(lat, lng, "gps");
+            } catch (e) {
+                console.error("Erro ao aplicar GPS", e);
+                alerta("Não foi possível usar a sua localização agora. " + MSG_MANUAL);
+            } finally {
                 setObtendoGps(false);
+            }
+        };
 
-                if (err.code === 1) {
-                    alerta("Permissão de localização negada. Ative o GPS do celular ou arraste o pino no mapa.");
-                } else {
-                    alerta("Não foi possível obter o GPS agora. Arraste o pino no mapa até sua casa.");
-                }
-            },
-            { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
-        );
+        const aoErrar = (err) => {
+            if (finalizado) return;
+            finalizado = true;
+            clearTimeout(vigia);
+            setObtendoGps(false);
+
+            const codigo = err && err.code;
+
+            if (codigo === 1) {
+                alerta("A permissão de localização foi negada. " + MSG_MANUAL);
+            } else if (codigo === 3) {
+                alerta("A localização demorou demais para responder. " + MSG_MANUAL);
+            } else {
+                alerta("Não foi possível obter o GPS agora. " + MSG_MANUAL);
+            }
+        };
+
+        try {
+            // enableHighAccuracy: false => usa rede/Wi-Fi e funciona em aparelhos antigos ou sem GPS preciso
+            navigator.geolocation.getCurrentPosition(aoSucesso, aoErrar, {
+                enableHighAccuracy: false,
+                timeout: 20000,
+                maximumAge: 60000
+            });
+        } catch (e) {
+            finalizado = true;
+            clearTimeout(vigia);
+            setObtendoGps(false);
+            console.error("Erro ao chamar geolocation", e);
+            alerta("Não foi possível obter o GPS agora. " + MSG_MANUAL);
+        }
     }
 
     function validarStep1() {
@@ -1133,6 +1243,13 @@ export function Checkout() {
                 };
             });
 
+            // Nunca envia item com valor zerado (o servidor também recusa)
+            if (itensPedido.some(i => !(Number(i.vl_unitario) > 0) || !(Number(i.qtd) > 0))) {
+                const erroItem = new Error("Item com valor zerado");
+                erroItem.mensagemAmigavel = "Há um item com valor zerado na sua sacola. Remova-o e adicione novamente.";
+                throw erroItem;
+            }
+
             const vlEntrega = ehRetirada ? 0 : frete;
             const vlTotalFinal = totalCart + vlEntrega;
 
@@ -1165,6 +1282,7 @@ export function Checkout() {
                     slug: slugAtual,
                     id_estabelecimento: idEstabelecimento,
                     transaction_amount: vlTotalFinal,
+                    vl_entrega: vlEntrega,
                     description: `Pedido 99Burger - ${nomeFormatado}`,
                     payer: {
                         email: emailCliente,
@@ -1210,7 +1328,7 @@ export function Checkout() {
             setTotalCart(0);
             setShowSucesso(true);
         } catch (err) {
-            alerta(err?.response?.data?.error || "Erro ao enviar pedido. Tente novamente.");
+            alerta(err?.response?.data?.error || err?.mensagemAmigavel || "Erro ao enviar pedido. Tente novamente.");
             if (err?.response) {
                 idempotencyKeyRef.current = null;
             }
@@ -1237,10 +1355,39 @@ export function Checkout() {
         }
     }
 
-    // Cancela o Pix pendente e volta para a Home do cardápio.
-    // Navega ANTES de mexer em qualquer estado: resetar pixGerado/pedidoBloqueado com
-    // step === 4 fazia a tela de Revisão renderizar sem dados (sacola/campos vazios) e quebrar.
-    function cancelarPixEFazerOutroPedido() {
+    // Cancela o pedido Pix no servidor (cobrança + pedido), limpa a sacola e volta para a Home.
+    // Navega ANTES de esvaziar a sacola: com step === 4 a Revisão renderizada sem itens quebrava a tela.
+    async function cancelarPixEFazerOutroPedido() {
+        if (cancelandoPix) return;
+        setCancelandoPix(true);
+
+        const pendente = lerPixPendente();
+        const slugAtual = (localStorage.getItem("slug") || "").trim();
+        const sessionId = localStorage.getItem("session_id");
+        const idPedido = pendente?.idPedido;
+
+        if (idPedido && slugAtual && sessionId) {
+            try {
+                await api.post("/pedidos/cancelar-cliente", {
+                    id_pedido: idPedido,
+                    slug: slugAtual,
+                    session_id: sessionId
+                });
+            } catch (err) {
+                setCancelandoPix(false);
+
+                if (err?.response?.data?.codigo === "PEDIDO_JA_ACEITO") {
+                    // O Pix já foi pago e aceito: segue o fluxo normal em vez de cancelar
+                    alerta(err.response.data.error);
+                    verificarPix(true);
+                    return;
+                }
+
+                alerta(err?.response?.data?.error || "Não foi possível cancelar agora. Verifique sua conexão e tente de novo.");
+                return;
+            }
+        }
+
         limparPixPendente();
 
         // refs não causam re-render, então podem ser zeradas com segurança
@@ -1249,6 +1396,12 @@ export function Checkout() {
         idempotencyKeyRef.current = null;
 
         irParaHome();
+
+        // esvazia a sacola só depois de sair desta tela
+        setTimeout(() => {
+            setCartItems([]);
+            setTotalCart(0);
+        }, 150);
     }
 
     // Sacola vazia / subtotal zerado: avisa e, ao fechar o alerta, volta para a Home
@@ -1594,7 +1747,7 @@ export function Checkout() {
 
                         {metodoEntrega === "mapa" && (
                             <div className="loc-opcao">
-                                <div className="loc-opcao-titulo">Toque no mapa ou arraste o pino azul até o portão da entrega</div>
+                                <div className="loc-opcao-titulo">Arraste o mapa para deixar o pino exatamente no portão da entrega</div>
                             </div>
                         )}
 
@@ -1606,36 +1759,7 @@ export function Checkout() {
                                     <div className="mapa-carregando">Carregando mapa...</div>
                                 ) : (
                                     <>
-                                        <MapContainer
-                                            center={posicao || POSICAO_PADRAO}
-                                            zoom={16}
-                                            maxZoom={17}
-                                            style={{ height: "230px", width: "100%" }}
-                                        >
-                                            <CamadasMapa />
-                                            <CliqueMapa onSelect={handleMapaManualDrag} />
-
-                                            <MapRefresher center={posicao} />
-
-                                            {posicao && (
-                                                <Marker
-                                                    position={posicao}
-                                                    draggable={true}
-                                                    eventHandlers={{
-                                                        dragend: async (e) => {
-                                                            const { lat, lng } = e.target.getLatLng();
-                                                            await handleMapaManualDrag(lat, lng);
-                                                        }
-                                                    }}
-                                                />
-                                            )}
-                                        </MapContainer>
-
-                                        {!posicao && (
-                                            <div className="mapa-overlay-vazio">
-                                                Escolha endereço, CEP, link ou toque no mapa.
-                                            </div>
-                                        )}
+                                        <MapaEntrega posicao={posicao} onSelect={handleMapaManualDrag} programaticoRef={mapaProgramaticoRef} />
                                     </>
                                 )}
                             </div>
@@ -1663,33 +1787,10 @@ export function Checkout() {
                         {renderFreteBadge()}
 
                         <div className="loc-opcao" ref={mapaDetalhesRef}>
-                            <div className="loc-opcao-titulo">Ajuste fino no mapa</div>
+                            <div className="loc-opcao-titulo">Ajuste o local: arraste o mapa por baixo do pino</div>
 
                             <div className="mapa-container" style={{ position: "relative" }}>
-                                <MapContainer
-                                    center={posicao || POSICAO_PADRAO}
-                                    zoom={16}
-                                    maxZoom={17}
-                                    style={{ height: "100%", width: "100%" }}
-                                >
-                                    <CamadasMapa />
-                                    <CliqueMapa onSelect={handleMapaManualDrag} />
-
-                                    {posicao && (
-                                        <Marker
-                                            position={posicao}
-                                            draggable={true}
-                                            eventHandlers={{
-                                                dragend: async (e) => {
-                                                    const { lat, lng } = e.target.getLatLng();
-                                                    await handleMapaManualDrag(lat, lng);
-                                                }
-                                            }}
-                                        />
-                                    )}
-
-                                    <MapRefresher center={posicao} />
-                                </MapContainer>
+                                <MapaEntrega posicao={posicao} onSelect={handleMapaManualDrag} programaticoRef={mapaProgramaticoRef} />
                             </div>
                         </div>
 
@@ -2029,8 +2130,9 @@ export function Checkout() {
                                     type="button"
                                     className="btn-cancelar-pix"
                                     onClick={cancelarPixEFazerOutroPedido}
+                                    disabled={cancelandoPix}
                                 >
-                                    Cancelar este Pix e fazer outro pedido
+                                    {cancelandoPix ? "Cancelando..." : "Cancelar este Pix e fazer outro pedido"}
                                 </button>
                             </div>
                         )}
@@ -2038,6 +2140,15 @@ export function Checkout() {
                 )}
             </div>
         </div>
+    );
+}
+
+// Qualquer erro de renderização aqui mostra uma mensagem em vez de tela branca
+export function Checkout() {
+    return (
+        <ErrorBoundary mensagem="Não foi possível carregar esta tela. Seu nome e telefone continuam salvos.">
+            <CheckoutInterno />
+        </ErrorBoundary>
     );
 }
 

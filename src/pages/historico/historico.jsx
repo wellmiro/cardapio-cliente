@@ -32,6 +32,11 @@ function Historico() {
     const [loadingLista, setLoadingLista] = useState(true);
     const [motoboy, setMotoboy] = useState(null); // { primeiro_nome, telefone } do entregador online
 
+    // Cancelamento pelo cliente
+    const [pedidoParaCancelar, setPedidoParaCancelar] = useState(null);
+    const [cancelando, setCancelando] = useState(false);
+    const [avisoCancelamento, setAvisoCancelamento] = useState(null); // { tipo: "ok" | "erro", texto }
+
     const slug = localStorage.getItem("slug");
     const sessionId = localStorage.getItem("session_id");
     const navigate = useNavigate();
@@ -152,6 +157,54 @@ function Historico() {
         }
     };
 
+    const recarregarLista = async () => {
+        try {
+            const resp = await api.get(`/pedidos/historico/${slug}/${sessionId}`);
+            setPedidos(resp.data);
+        } catch (err) {
+            console.error("Erro ao recarregar pedidos:", err);
+        }
+    };
+
+    // O servidor confere se o atendente ainda não aceitou o pedido no Delphi
+    const confirmarCancelamento = async () => {
+        if (!pedidoParaCancelar || cancelando) return;
+
+        const idCancelar = pedidoParaCancelar;
+        setCancelando(true);
+
+        try {
+            const resp = await api.post("/pedidos/cancelar-cliente", {
+                id_pedido: idCancelar,
+                slug,
+                session_id: sessionId
+            });
+
+            setPedidos(anterior =>
+                anterior.map(p => (p.id_pedido === idCancelar ? { ...p, status: "C", pode_cancelar: 0 } : p))
+            );
+            setDetalhes(anterior =>
+                anterior && anterior.id_pedido === idCancelar ? { ...anterior, status: "C" } : anterior
+            );
+
+            setAvisoCancelamento({
+                tipo: "ok",
+                texto: resp.data?.reembolsado
+                    ? "Pedido cancelado. O valor do Pix será devolvido para você."
+                    : "Pedido cancelado com sucesso."
+            });
+        } catch (err) {
+            setAvisoCancelamento({
+                tipo: "erro",
+                texto: err?.response?.data?.error || "Não foi possível cancelar o pedido agora. Tente novamente."
+            });
+            recarregarLista(); // o botão some se o pedido já foi aceito
+        } finally {
+            setCancelando(false);
+            setPedidoParaCancelar(null);
+        }
+    };
+
     const fmt = (v) =>
         new Intl.NumberFormat("pt-BR", {
             style: "currency",
@@ -197,6 +250,13 @@ function Historico() {
                     </button>
                     <h2>Meus Pedidos</h2>
                 </div>
+
+                {avisoCancelamento && (
+                    <div className={`aviso-cancelamento ${avisoCancelamento.tipo}`}>
+                        <span>{avisoCancelamento.texto}</span>
+                        <button type="button" onClick={() => setAvisoCancelamento(null)} aria-label="Fechar aviso">✕</button>
+                    </div>
+                )}
 
                 {pedidos.length === 0 ? (
                     <div className="card-pedido" style={{ padding: '40px 20px', textAlign: 'center' }}>
@@ -246,7 +306,7 @@ function Historico() {
                                                         <div className="cancelado-box-icone">🚫</div>
                                                         <div className="cancelado-box-titulo">Pedido Cancelado</div>
                                                         <p className="cancelado-box-sub">
-                                                            Este pedido foi recusado ou cancelado pelo estabelecimento.
+                                                            Este pedido foi cancelado.
                                                         </p>
                                                     </div>
                                                 ) : (
@@ -322,6 +382,16 @@ function Historico() {
                                                     </div>
                                                 </div>
                                                 
+                                                {detalhes.status !== "C" && Number(p.pode_cancelar) === 1 && (
+                                                    <button
+                                                        type="button"
+                                                        className="btn-cancelar-pedido"
+                                                        onClick={() => setPedidoParaCancelar(p.id_pedido)}
+                                                    >
+                                                        Cancelar Pedido
+                                                    </button>
+                                                )}
+
                                                 <div style={{ marginTop: '20px', textAlign: 'center', borderTop: '1px solid #f7fafc', paddingTop: '10px' }}>
                                                     <p style={{ fontSize: '0.7rem', color: '#cbd5e0' }}>
                                                         Sessão: {sessionId?.substring(0, 12)}...
@@ -340,6 +410,33 @@ function Historico() {
                     })
                 )}
             </div>
+
+            {pedidoParaCancelar && (
+                <div className="modal-cancelar-overlay" onClick={() => !cancelando && setPedidoParaCancelar(null)}>
+                    <div className="modal-cancelar-box" onClick={e => e.stopPropagation()}>
+                        <h3>Cancelar pedido #{pedidoParaCancelar}?</h3>
+                        <p>Tem certeza que deseja cancelar o pedido?</p>
+                        <div className="modal-cancelar-acoes">
+                            <button
+                                type="button"
+                                className="modal-cancelar-voltar"
+                                onClick={() => setPedidoParaCancelar(null)}
+                                disabled={cancelando}
+                            >
+                                Voltar
+                            </button>
+                            <button
+                                type="button"
+                                className="modal-cancelar-confirmar"
+                                onClick={confirmarCancelamento}
+                                disabled={cancelando}
+                            >
+                                {cancelando ? "Cancelando..." : "Sim, cancelar"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

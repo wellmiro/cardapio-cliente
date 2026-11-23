@@ -1967,6 +1967,22 @@ export function Checkout() {
                                 >
                                     Já paguei, verificar agora
                                 </button>
+
+                                <button
+                                    type="button"
+                                    className="btn-cancelar-pix"
+                                    onClick={() => {
+                                        limparPixPendente();
+                                        setPixGerado(false);
+                                        setPedidoBloqueado(false);
+                                        setMpPaymentId(null);
+                                        envioEmAndamentoRef.current = false;
+                                        idempotencyKeyRef.current = null;
+                                        setStep(1);
+                                    }}
+                                >
+                                    Cancelar este Pix e fazer outro pedido
+                                </button>
                             </div>
                         )}
                     </div>

@@ -158,13 +158,35 @@
     transform: scale(0.97);
 }
 
-/* ===== CELULAR: card horizontal ===== */
+/* ===== CELULAR: card horizontal compacto (estilo iFood) =====
+   Grade de 2 colunas: texto (flexível) | foto 90x90.
+   O botão "+" fica na MESMA célula da foto e é puxado com
+   transform para o canto inferior direito dela, então fica
+   alinhado mesmo que o texto do card tenha 1, 2 ou 3 linhas. */
 @media (max-width: 699px) {
     .produto-box {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 150px;
+        grid-template-columns: minmax(0, 1fr) 90px;
         align-items: center;
-        padding: 16px 14px 16px 18px;
+        margin: 0 0 10px 0;
+        padding: 10px 12px;
+        border-radius: 12px;
+        box-shadow: 0 1px 4px rgba(15, 23, 42, 0.07);
+    }
+
+    .produto-box:active {
+        transform: scale(0.99);
+    }
+
+    /* contador de itens no carrinho: "pingo" no canto do card */
+    .badge-qtd {
+        top: -6px;
+        right: 8px;
+        min-width: 20px;
+        height: 20px;
+        border-radius: 10px;
+        font-size: 0.7rem;
+        line-height: 20px;
     }
 
     .produto-info {
@@ -176,16 +198,16 @@
     .produto-img-container {
         grid-column: 2;
         grid-row: 1;
-        width: 150px;
-        height: 150px;
+        width: 90px;
+        height: 90px;
         margin: 0;
-        background: transparent;
-        border-radius: 14px;
+        background: #f1f5f9;
+        border-radius: 10px;
     }
 
     .produto-img-container img {
-        width: 150px;
-        height: 150px;
+        width: 90px;
+        height: 90px;
     }
 
     /* no celular o aviso fica só dentro do modal */
@@ -193,68 +215,117 @@
         display: none;
     }
 
+    /* textos mais juntos: nome > descrição > preço */
     .prod-vitrine-nome {
-        font-size: 1.05rem;
+        margin: 0 0 2px 0;
+        font-size: 0.95rem;
+        line-height: 1.25;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
     }
 
     .prod-vitrine-descricao {
+        margin: 0 0 6px 0;
+        font-size: 0.78rem;
+        line-height: 1.3;
         -webkit-line-clamp: 2;
     }
 
-    /* botão vira um "+" redondo sobre o canto da foto */
+    .prod-vitrine-preco {
+        font-size: 0.98rem;
+        line-height: 1.2;
+    }
+
+    /* botão "+" 30x30, branco com cruz vermelha, no canto da foto */
     .btn-cart {
-        position: absolute;
-        right: 10px;
-        bottom: 10px;
-        width: 44px;
-        height: 44px;
+        position: relative;
+        z-index: 2;
+        grid-column: 2;
+        grid-row: 1;
+        align-self: center;
+        justify-self: end;
+        width: 30px;
+        height: 30px;
         margin: 0;
         padding: 0;
-        background: #ff9800;
+        background: #ffffff;
         border: none;
         border-radius: 50%;
-        box-shadow: 0 4px 10px rgba(255, 152, 0, 0.45);
+        box-shadow: 0 2px 6px rgba(15, 23, 42, 0.22);
+        outline: none;
+        -webkit-transform: translate(6px, 37px);
+        transform: translate(6px, 37px);
     }
 
     .btn-cart:hover {
-        background: #ff9800;
+        background: #ffffff;
         color: #E84F3D;
+    }
+
+    .btn-cart:active {
+        -webkit-transform: translate(6px, 37px) scale(0.92);
+        transform: translate(6px, 37px) scale(0.92);
     }
 
     .btn-cart span {
         display: none;
     }
 
+    /* cruz desenhada em CSS: sempre centralizada, sem depender da fonte */
+    .btn-cart::before,
+    .btn-cart::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        background: #E84F3D;
+        border-radius: 1px;
+    }
+
     .btn-cart::before {
-        content: "+";
-        display: block;
-        color: #E84F3D;
-        font-size: 1.9rem;
-        font-weight: 900;
-        line-height: 44px;
-        text-align: center;
+        width: 12px;
+        height: 2px;
+        margin: -1px 0 0 -6px;
+    }
+
+    .btn-cart::after {
+        width: 2px;
+        height: 12px;
+        margin: -6px 0 0 -1px;
     }
 }
 
-/* telas bem pequenas (J4, Moto E13 em zoom alto etc.) */
-@media (max-width: 360px) {
+/* telas muito estreitas (< 340px): foto um pouco menor */
+@media (max-width: 340px) {
     .produto-box {
-        grid-template-columns: minmax(0, 1fr) 118px;
-        padding: 14px 12px 14px 14px;
+        grid-template-columns: minmax(0, 1fr) 80px;
+        padding: 10px;
     }
 
     .produto-img-container,
     .produto-img-container img {
-        width: 118px;
-        height: 118px;
+        width: 80px;
+        height: 80px;
+    }
+
+    .btn-cart {
+        -webkit-transform: translate(6px, 32px);
+        transform: translate(6px, 32px);
+    }
+
+    .btn-cart:active {
+        -webkit-transform: translate(6px, 32px) scale(0.92);
+        transform: translate(6px, 32px) scale(0.92);
     }
 
     .prod-vitrine-nome {
-        font-size: 0.98rem;
+        font-size: 0.92rem;
     }
 
     .prod-vitrine-preco {
-        font-size: 1.02rem;
+        font-size: 0.95rem;
     }
 }
 

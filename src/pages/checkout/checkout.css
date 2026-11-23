@@ -687,16 +687,24 @@
 
 .btn-cancelar-pix {
     display: block;
-    margin: 14px auto 0;
-    padding: 6px 10px;
-    background: none;
-    border: none;
-    color: #888;
-    font-size: 13px;
-    text-decoration: underline;
+    width: 100%;
+    margin: 20px auto 0;
+    padding: 16px 14px;
+    background: #fff;
+    border: 2px solid #d32f2f;
+    border-radius: 12px;
+    color: #d32f2f;
+    font-family: 'Nunito', sans-serif;
+    font-size: 1rem;
+    font-weight: 800;
+    line-height: 1.3;
+    text-align: center;
     cursor: pointer;
+    transition: background 0.2s, color 0.2s;
 }
 
-.btn-cancelar-pix:hover {
-    color: #d32f2f;
+.btn-cancelar-pix:hover,
+.btn-cancelar-pix:active {
+    background: #d32f2f;
+    color: #fff;
 }

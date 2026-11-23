@@ -275,6 +275,8 @@ export function Checkout() {
     const [showSucesso, setShowSucesso] = useState(false);
     const [enviando, setEnviando] = useState(false);
     const [pedidoBloqueado, setPedidoBloqueado] = useState(false);
+    // Quando true, fechar o alerta leva o cliente de volta para a Home do cardápio
+    const voltarHomeAoFecharAlertaRef = useRef(false);
 
     // Trava SÍNCRONA contra duplo clique
     const envioEmAndamentoRef = useRef(false);
@@ -1076,7 +1078,7 @@ export function Checkout() {
         if (envioEmAndamentoRef.current || enviando || pedidoBloqueado) return;
 
         if (!cartItems || cartItems.length === 0 || totalCart <= 0) {
-            alerta("Sua sacola está vazia. Adicione pelo menos um item antes de finalizar.");
+            alertaSacolaVazia();
             return;
         }
 
@@ -1222,6 +1224,31 @@ export function Checkout() {
         navigate("/historico", { replace: true });
     };
 
+    // Home do cardápio da loja (mesma rota usada no botão "Voltar ao cardápio")
+    function irParaHome() {
+        if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
+        const slugAtual = localStorage.getItem("slug");
+        if (slugAtual) {
+            navigate(`/${slugAtual}`, { replace: true });
+        } else {
+            navigate(-1);
+        }
+    }
+
+    // Sacola vazia / subtotal zerado: avisa e, ao fechar o alerta, volta para a Home
+    function alertaSacolaVazia() {
+        voltarHomeAoFecharAlertaRef.current = true;
+        alerta("Sua sacola está vazia. Escolha pelo menos um item antes de finalizar.");
+    }
+
+    function fecharAlerta() {
+        setShowAlert(false);
+        if (voltarHomeAoFecharAlertaRef.current) {
+            voltarHomeAoFecharAlertaRef.current = false;
+            irParaHome();
+        }
+    }
+
     const copiarChavePix = () => {
         navigator.clipboard.writeText(pixCopiaECola);
         setCopiado(true);
@@ -1230,6 +1257,20 @@ export function Checkout() {
 
     const STEPS = ["Dados", "Entrega", "Pagamento", "Revisão"];
     const totalPedido = totalCart + (tipoEntrega === "retirada" ? 0 : frete);
+
+    // Trava: sacola sem itens ou subtotal R$ 0,00
+    const sacolaInvalida = !cartItems || cartItems.length === 0 || totalCart <= 0;
+
+    // Na Revisão (Step 4), se a sacola estiver inválida: alerta + volta para a Home.
+    // Não dispara durante o Pix, nem quando o pedido acabou de ser enviado (sacola é limpa).
+    useEffect(() => {
+        if (step !== 4) return;
+        if (!sacolaInvalida) return;
+        if (pixGerado || pedidoBloqueado || showSucesso || pixPendenteNaEntrada) return;
+        if (showAlert) return;
+        alertaSacolaVazia();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [step, sacolaInvalida, pixGerado, pedidoBloqueado, showSucesso, pixPendenteNaEntrada]);
 
     const renderFreteBadge = () => (
         <>
@@ -1267,7 +1308,7 @@ export function Checkout() {
     // Sacola vazia: não deixa o cliente andar pelas etapas (nem chegar na revisão com R$ 0,00).
     // Não bloqueia quando o pedido acabou de ser enviado (sucesso), nem durante o fluxo do Pix.
     const sacolaVazia = !cartItems || cartItems.length === 0;
-    if (sacolaVazia && !showSucesso && !pixGerado && !pedidoBloqueado && !pixPendenteNaEntrada) {
+    if (sacolaVazia && step !== 4 && !showSucesso && !pixGerado && !pedidoBloqueado && !pixPendenteNaEntrada) {
         const slugVolta = localStorage.getItem("slug");
         return (
             <div className="checkout-page">
@@ -1298,7 +1339,7 @@ export function Checkout() {
                 <AlertModal
                     tipo={tipoAlert}
                     mensagem={msgAlert}
-                    onClose={() => setShowAlert(false)}
+                    onClose={fecharAlerta}
                 />
             )}
 
@@ -1912,7 +1953,7 @@ export function Checkout() {
                                     <button
                                         className={`btn-checkout ${enviando ? "enviando" : ""}`}
                                         onClick={finalizarPedido}
-                                        disabled={enviando || pedidoBloqueado}
+                                        disabled={enviando || pedidoBloqueado || sacolaInvalida}
                                     >
                                         {enviando ? (
                                             <>
@@ -1978,7 +2019,7 @@ export function Checkout() {
                                         setMpPaymentId(null);
                                         envioEmAndamentoRef.current = false;
                                         idempotencyKeyRef.current = null;
-                                        setStep(1);
+                                        irParaHome();
                                     }}
                                 >
                                     Cancelar este Pix e fazer outro pedido

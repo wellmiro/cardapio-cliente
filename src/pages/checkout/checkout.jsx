@@ -1227,12 +1227,27 @@ export function Checkout() {
     // Home do cardápio da loja (mesma rota usada no botão "Voltar ao cardápio")
     function irParaHome() {
         if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
-        const slugAtual = localStorage.getItem("slug");
+        const slugAtual = (localStorage.getItem("slug") || "").trim();
         if (slugAtual) {
             navigate(`/${slugAtual}`, { replace: true });
         } else {
-            navigate(-1);
+            // sem slug não há rota de loja válida: recarrega na raiz (nunca deixa a tela em branco)
+            window.location.href = "/";
         }
+    }
+
+    // Cancela o Pix pendente e volta para a Home do cardápio.
+    // Navega ANTES de mexer em qualquer estado: resetar pixGerado/pedidoBloqueado com
+    // step === 4 fazia a tela de Revisão renderizar sem dados (sacola/campos vazios) e quebrar.
+    function cancelarPixEFazerOutroPedido() {
+        limparPixPendente();
+
+        // refs não causam re-render, então podem ser zeradas com segurança
+        pixConfirmadoRef.current = true; // impede finalizarPixAprovado de rodar depois do cancelamento
+        envioEmAndamentoRef.current = false;
+        idempotencyKeyRef.current = null;
+
+        irParaHome();
     }
 
     // Sacola vazia / subtotal zerado: avisa e, ao fechar o alerta, volta para a Home
@@ -2012,15 +2027,7 @@ export function Checkout() {
                                 <button
                                     type="button"
                                     className="btn-cancelar-pix"
-                                    onClick={() => {
-                                        limparPixPendente();
-                                        setPixGerado(false);
-                                        setPedidoBloqueado(false);
-                                        setMpPaymentId(null);
-                                        envioEmAndamentoRef.current = false;
-                                        idempotencyKeyRef.current = null;
-                                        irParaHome();
-                                    }}
+                                    onClick={cancelarPixEFazerOutroPedido}
                                 >
                                     Cancelar este Pix e fazer outro pedido
                                 </button>

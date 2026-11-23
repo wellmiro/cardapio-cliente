@@ -5,6 +5,7 @@ import ProdutoVitrine from "../../components/produto-vitrine/produto-vitrine.jsx
 import CategoriaBarra from "../../components/categoria-barra/categoria-barra";
 import { CartContext } from "../../contexts/cart-context.jsx";
 import api from "../../services/api.js";
+import { gerarUUID } from "../../utils/uuid.js";
 import "./home.css";
 
 function Home() {
@@ -66,7 +67,7 @@ function Home() {
   useEffect(() => {
     if (id) {
       localStorage.setItem("slug", id);
-      let sessionId = localStorage.getItem("session_id") || crypto.randomUUID();
+      let sessionId = localStorage.getItem("session_id") || gerarUUID();
       localStorage.setItem("session_id", sessionId);
       carregarDados();
     }

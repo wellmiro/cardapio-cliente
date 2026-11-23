@@ -2,6 +2,7 @@ import { useEffect, useState, useContext, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../../components/navbar/navbar.jsx";
 import api from "../../services/api.js";
+import { gerarUUID } from "../../utils/uuid.js";
 import { CartContext } from "../../contexts/cart-context.jsx";
 import AlertModal from "../../components/alert-modal/AlertModal.jsx";
 
@@ -1083,7 +1084,7 @@ export function Checkout() {
         }
 
         const slugAtual = localStorage.getItem("slug");
-        const session_id = localStorage.getItem("session_id") || crypto.randomUUID();
+        const session_id = localStorage.getItem("session_id") || gerarUUID();
 
         if (!slugAtual) {
             alerta("Erro: Estabelecimento não encontrado.");
@@ -1095,7 +1096,7 @@ export function Checkout() {
         setPedidoBloqueado(true);
 
         if (!idempotencyKeyRef.current) {
-            idempotencyKeyRef.current = crypto.randomUUID();
+            idempotencyKeyRef.current = gerarUUID();
         }
 
         try {
